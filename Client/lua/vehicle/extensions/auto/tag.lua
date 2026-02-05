@@ -8,7 +8,7 @@ local gameModeUpdateRunning = false
 local function checkGameRunning()
 	if M.gamestate.gameRunning then
 		if not gameModeUpdateRunning then
-			gameModeUpdate = outbreakcontactdetection and outbreakcontactdetection.checkForCollisions or nop
+			gameModeUpdate = tagcontactdetection and tagcontactdetection.checkForCollisions or nop
 			gameModeUpdateRunning = true
 		end
 	elseif gameModeUpdateRunning then

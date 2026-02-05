@@ -1,4 +1,4 @@
-#include "outbreakVignette.h.hlsl"
+#include "tagVignette.h.hlsl"
 
 #ifdef SHADER_STAGE_VS
     #define mainV main

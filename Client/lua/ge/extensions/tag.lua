@@ -7,7 +7,7 @@ local gamestate = {players = {}, settings = {}}
 
 local defaultgreenFadeDistance = 20
 
---extensions.unload("outbreak") extensions.load("outbreak") extensions.reload("outbreak")
+--extensions.unload("tag") extensions.load("tag") extensions.reload("tag")
 local blockedActions = {"dropPlayerAtCamera", "dropPlayerAtCameraNoReset", "recover_vehicle", "recover_vehicle_alt", "recover_to_last_road", "reload_vehicle", "reload_all_vehicles", "loadHome", "saveHome", "reset_all_physics" ,"reset_physics"}
 
 local function getStat(name)
@@ -175,7 +175,7 @@ local function recieveGameState(data)
 		end
 	end
 	gamestate = data
-	be:queueAllObjectLua("if outbreak then outbreak.setGameState("..serialize(gamestate)..") end")
+	be:queueAllObjectLua("if tag then tag.setGameState("..serialize(gamestate)..") end")
 end
 
 local function mergeTable(table,gamestateTable)
@@ -196,7 +196,7 @@ end
 local function updateGameState(data)
 
 	mergeTable(jsonDecode(data),gamestate)
-	be:queueAllObjectLua("if outbreak then outbreak.updateGameState('"..data.."') end")
+	be:queueAllObjectLua("if tag then tag.updateGameState('"..data.."') end")
 
 	-- In game messages
 	local time = 0
@@ -207,7 +207,7 @@ local function updateGameState(data)
 
 	if gamestate.gameRunning and time and time == -4 then
 		if TriggerServerEvent then
-			TriggerServerEvent("outbreak_clientReady","nil")
+			TriggerServerEvent("tag_clientReady","nil")
 		end
 	end
 
@@ -326,7 +326,7 @@ local function updateGameState(data)
 				end
 			end
 			if not skipPlayer then
-				guihooks.message({txt = txt}, 30, "outbreak."..player.."")
+				guihooks.message({txt = txt}, 30, "tag."..player.."")
 			end
 		end
 
@@ -335,7 +335,7 @@ local function updateGameState(data)
 
 	end
 	if txt ~= "" then
-		guihooks.message({txt = txt}, 1, "outbreak.time")
+		guihooks.message({txt = txt}, 1, "tag.time")
 	end
 	if gamestate.gameEnded then
 		local yourName = MPConfig.getNickname()
@@ -371,7 +371,7 @@ local function updateGameState(data)
 end
 
 local function requestGameState()
-	if TriggerServerEvent then TriggerServerEvent("outbreak_requestGameState","nil") end
+	if TriggerServerEvent then TriggerServerEvent("tag_requestGameState","nil") end
 end
 
 local function sendContact(vehID,localVehID)
@@ -425,7 +425,7 @@ local function onVehicleSpawned(VehicleID)
 			vehicle.originalcolorPalette1 = veh.colorPalette1
 			vehicle.transition = 1
 		end
-		veh:queueLuaCommand("if outbreak then outbreak.setGameState("..serialize(gamestate)..") end")
+		veh:queueLuaCommand("if tag then tag.setGameState("..serialize(gamestate)..") end")
 	end
 end
 
@@ -694,10 +694,10 @@ local function onExtensionUnloaded()
 	resetInfected()
 end
 
-if MPGameNetwork then AddEventHandler("outbreak_recieveInfected", recieveInfected) end
-if MPGameNetwork then AddEventHandler("outbreak_resetInfected", resetInfected) end
-if MPGameNetwork then AddEventHandler("outbreak_recieveGameState", recieveGameState) end
-if MPGameNetwork then AddEventHandler("outbreak_updateGameState", updateGameState) end
+if MPGameNetwork then AddEventHandler("tag_recieveInfected", recieveInfected) end
+if MPGameNetwork then AddEventHandler("tag_resetInfected", resetInfected) end
+if MPGameNetwork then AddEventHandler("tag_recieveGameState", recieveGameState) end
+if MPGameNetwork then AddEventHandler("tag_updateGameState", updateGameState) end
 
 requestGameState()
 

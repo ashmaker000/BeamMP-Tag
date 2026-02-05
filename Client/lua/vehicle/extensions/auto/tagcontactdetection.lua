@@ -35,8 +35,8 @@ local function collisionDebugDraw(vehID, isColliding)
 end --]]
 
 local function checkForCollisions()
-	--if not outbreak then return end
-	--if outbreak.gamestate and not outbreak.gamestate.gameRunning then return end
+	--if not tag then return end
+	--if tag.gamestate and not tag.gamestate.gameRunning then return end
 	if carLength == 0 then
 		--carWidth = obj:getInitialWidth()
 		carLength = obj:getInitialLength()
@@ -50,7 +50,7 @@ local function checkForCollisions()
 		for _,vehID in pairs(mapmgr.objectCollisionIds) do
 			local distance = vehiclePosition:distance(obj:getObjectCenterPosition(vehID))
 			if distance < ((obj:getObjectInitialLength(vehID)+carLength)/2)*1.1 then
-				obj:queueGameEngineLua("if outbreak then outbreak.sendContact("..vehID..","..vehicleID..") end")
+				obj:queueGameEngineLua("if tag then tag.sendContact("..vehID..","..vehicleID..") end")
 				--isColliding = true
 				--collisionDebugDraw(vehID,isColliding)
 			end
