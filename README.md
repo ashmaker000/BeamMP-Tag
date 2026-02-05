@@ -12,17 +12,15 @@ BeamMP-Tag is a team-focused variant of the BeamMP-Outbreak mod BY Olrosse. It r
 - Server-driven state sync via the `outbreak_*`/now `tag_*` events so clients know their teammates.
 
 ## Setup
-1. Place the `Client/` and `Server/` folders into your BeamMP mod install directory.
-2. Start BeamMP with the `tag.lua` extension enabled.
-3. Run the `Server/Tag/main.lua` script on your BeamMP server to register the `/tag` commands and game logic.
+1. Place the `Resources/Client` and `Resources/Server` folders into your BeamMP server directory.
+2. Start a round by using `tag.lua` in the chat box.
+3. After a few seconds the round will start and the person being Tag will turn to Red and will need to tag every one in Blue.
 
 ## Commands
 All commands now use the `/tag` prefix. Examples:
 - `/tag start` – Start a tagging round. Add an optional duration in minutes.
 - `/tag stop` – End the current round.
 - `/tag reset` – Reset player weights.
-- `/tag set teams <count>` – (Upcoming) configure how many color teams play.
-- `/tag set greenFadeDist <m>` – Adjust how close players need to be before a tint starts.
 - `/tag <command> help` – Show available commands and descriptions.
 
 Credit to [Olrosse](https://github.com/Olrosse),
