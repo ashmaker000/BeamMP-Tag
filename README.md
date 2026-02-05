@@ -21,3 +21,5 @@ All commands now use the `/tag` prefix. Examples:
 - `/tag set teams <count>` – (Upcoming) configure how many color teams play.
 - `/tag set greenFadeDist <m>` – Adjust how close players need to be before a tint starts.
 - `/tag <command> help` – Show available commands and descriptions.
+
+Credit to [Olrosse](https://github.com/Olrosse),
