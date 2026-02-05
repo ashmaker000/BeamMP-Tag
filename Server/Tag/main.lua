@@ -6,7 +6,7 @@ local gameState = {players = {}}
 local lastState = gameState
 local weightingArray = {}
 
-gameState.everyoneInfected = false
+gameState.everyoneTagged = false
 gameState.gameRunning = false
 gameState.gameEnding = false
 
@@ -14,9 +14,9 @@ local includedPlayers = {} --TODO make these do something
 local excludedPlayers = {} --TODO make these do something
 
 local roundLength = 5*60 -- length of the game in seconds
-local defaultGreenFadeDistance = 100 -- how close the infector has to be for the screen to start to turn green
+local defaultGreenFadeDistance = 100 -- how close the tagger has to be for the screen to start to turn green
 local defaultColorPulse = false -- if the car color should pulse between the car color and green
-local defaultInfectorTint = true -- if the infector should have a green tint
+local defaultTaggerTint = true -- if the tagger should have a green tint
 local defaultDistancecolor = 0.5 -- max intensity of the green filter
 local disableResetsWhenMoving = true
 local maxResetMovingSpeed = 2
@@ -24,7 +24,7 @@ local maxResetMovingSpeed = 2
 MP.RegisterEvent("tag_clientReady","clientReady")
 MP.RegisterEvent("tag_onContactRecieve","onContact")
 MP.RegisterEvent("tag_requestGameState","requestGameState")
-MP.TriggerClientEvent(-1, "tag_resetInfected", "data")
+MP.TriggerClientEvent(-1, "tag_resetTagged", "data")
 
 local function seconds_to_days_hours_minutes_seconds(total_seconds) --modified code from https://stackoverflow.com/questions/45364628/lua-4-script-to-convert-seconds-elapsed-to-days-hours-minutes-seconds
 	local time_days		= floor(total_seconds / 86400)
@@ -97,21 +97,21 @@ end
 
 local function infectPlayer(playerName,force)
 	local player = gameState.players[playerName]
-	if player.localContact and player.remoteContact and not player.infected or force and not player.infected then
-		player.infected = true
+	if player.localContact and player.remoteContact and not player.tagged or force and not player.tagged then
+		player.tagged = true
 		if not force then
-			local infectorPlayerName = player.infecter
-			gameState.players[infectorPlayerName].stats.infected = gameState.players[infectorPlayerName].stats.infected + 1
-			gameState.InfectedPlayers = gameState.InfectedPlayers + 1
-			gameState.nonInfectedPlayers = gameState.nonInfectedPlayers - 1
-			gameState.oneInfected = true
+			local taggerPlayerName = player.infecter
+			gameState.players[taggerPlayerName].stats.tagged = gameState.players[taggerPlayerName].stats.tagged + 1
+			gameState.TaggedPlayers = gameState.TaggedPlayers + 1
+			gameState.nonTaggedPlayers = gameState.nonTaggedPlayers - 1
+			gameState.oneTagged = true
 
-			MP.SendChatMessage(-1,""..infectorPlayerName.." has infected "..playerName.."!")
+			MP.SendChatMessage(-1,""..taggerPlayerName.." has tagged "..playerName.."!")
 		else
-			MP.SendChatMessage(-1,"server has infected "..playerName.."!")
+			MP.SendChatMessage(-1,"server has tagged "..playerName.."!")
 		end
 
-		MP.TriggerClientEvent(-1, "tag_recieveInfected", playerName)
+		MP.TriggerClientEvent(-1, "tag_recieveTagged", playerName)
 
 		updateClients()
 		--MP.TriggerClientEventJson(-1, "tag_recieveGameState", gameState)
@@ -125,18 +125,18 @@ function onContact(localPlayerID, data)
 		local localPlayer = gameState.players[localPlayerName]
 		local remotePlayer = gameState.players[remotePlayerName]
 		if localPlayer and remotePlayer then
-			if localPlayer.infected and not remotePlayer.infected then
+			if localPlayer.tagged and not remotePlayer.tagged then
 				gameState.players[remotePlayerName].remoteContact = true
 				gameState.players[remotePlayerName].infecter = localPlayerName
 				infectPlayer(remotePlayerName)
 			end
-			if remotePlayer.infected and not localPlayer.infected then
+			if remotePlayer.tagged and not localPlayer.tagged then
 				gameState.players[localPlayerName].localContact = true
 				gameState.players[localPlayerName].infecter = remotePlayerName
 				infectPlayer(localPlayerName)
 			end
-			if gameState.nonInfectedPlayers == 0 then 
-				gameState.everyoneInfected = true
+			if gameState.nonTaggedPlayers == 0 then 
+				gameState.everyoneTagged = true
 				updateClients()
 			end
 		end
@@ -149,7 +149,7 @@ local function gameSetup(time)
 	gameState.settings = {
 		GreenFadeDistance = defaultGreenFadeDistance,
 		ColorPulse = defaultColorPulse,
-		infectorTint = defaultInfectorTint,
+		taggerTint = defaultTaggerTint,
 		distancecolor = defaultDistancecolor,
 		disableResetsWhenMoving = disableResetsWhenMoving,
 		maxResetMovingSpeed = maxResetMovingSpeed
@@ -167,9 +167,9 @@ local function gameSetup(time)
 
 			local player = {}
 			player.stats = {}
-			player.stats.infected = 0
+			player.stats.tagged = 0
 			player.ID = ID
-			player.infected = false
+			player.tagged = false
 			player.localContact = false
 			player.remoteContact = false
 			gameState.players[Player] = player
@@ -185,13 +185,13 @@ local function gameSetup(time)
 	end
 
 	gameState.playerCount = playerCount
-	gameState.InfectedPlayers = 0
-	gameState.nonInfectedPlayers = playerCount
+	gameState.TaggedPlayers = 0
+	gameState.nonTaggedPlayers = playerCount
 	gameState.time = -5
 	gameState.roundLength = time or roundLength
 	gameState.endtime = -1
-	gameState.oneInfected = false
-	gameState.everyoneInfected = false
+	gameState.oneTagged = false
+	gameState.everyoneTagged = false
 	gameState.gameRunning = true
 	gameState.gameEnding = false
 	gameState.gameEnded = false
@@ -201,31 +201,31 @@ end
 
 local function gameEnd(reason)
 	gameState.gameEnding = true
-	local infectedCount = 0
-	local nonInfectedCount = 0
+	local taggedCount = 0
+	local nonTaggedCount = 0
 	local players = gameState.players
 	for k,player in pairs(players) do
-		if player.infected then
-			infectedCount = infectedCount + 1
+		if player.tagged then
+			taggedCount = taggedCount + 1
 		else
-			nonInfectedCount = nonInfectedCount + 1
+			nonTaggedCount = nonTaggedCount + 1
 		end
 	end
 	if reason == "time" then
-		MP.SendChatMessage(-1,"Game over,"..nonInfectedCount.." survived and "..infectedCount.." got infected")
-	elseif reason == "infected" then
+		MP.SendChatMessage(-1,"Game over,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
+	elseif reason == "tagged" then
 		MP.SendChatMessage(-1,"Game over, no survivors")
 	elseif reason == "manual" then
-		--MP.SendChatMessage(-1,"Game stopped,"..nonInfectedCount.." survived and "..infectedCount.." got infected")
+		--MP.SendChatMessage(-1,"Game stopped,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
 		MP.SendChatMessage(-1,"Game stopped, Everyone Looses")
 		gameState.endtime = gameState.time + 10
 	else
-		MP.SendChatMessage(-1,"Game stopped for uknown reason,"..nonInfectedCount.." survived and "..infectedCount.." got infected")
+		MP.SendChatMessage(-1,"Game stopped for uknown reason,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
 	end
 end
 
 local function infectRandomPlayer()
-	gameState.oneInfected = false
+	gameState.oneTagged = false
 	local players = gameState.players
 	local weightRatio = 0
 	for playername,player in pairs(players) do
@@ -246,28 +246,28 @@ local function infectRandomPlayer()
 
 	for playername,player in pairs(players) do
 		if randomID >= weightingArray[playername].startNumber and randomID <= weightingArray[playername].endNumber then--if count == randomID then
-			if not gameState.oneInfected then
+			if not gameState.oneTagged then
 				gameState.players[playername].remoteContact = true
 				gameState.players[playername].localContact = true
-				gameState.players[playername].infected = true
-				gameState.players[playername].firstInfected = true
+				gameState.players[playername].tagged = true
+				gameState.players[playername].firstTagged = true
 
 				if gameState.time == 5 then
-					MP.SendChatMessage(-1,""..playername.." is first infected!")
+					MP.SendChatMessage(-1,""..playername.." is first tagged!")
 				else
-					MP.SendChatMessage(-1,"no infected players, "..playername.." has been randomly infected!")
+					MP.SendChatMessage(-1,"no tagged players, "..playername.." has been randomly tagged!")
 				end
-				MP.TriggerClientEvent(-1, "tag_recieveInfected", playername)
-				gameState.oneInfected = true
-				gameState.InfectedPlayers = gameState.InfectedPlayers + 1
-				gameState.nonInfectedPlayers = gameState.nonInfectedPlayers - 1
+				MP.TriggerClientEvent(-1, "tag_recieveTagged", playername)
+				gameState.oneTagged = true
+				gameState.TaggedPlayers = gameState.TaggedPlayers + 1
+				gameState.nonTaggedPlayers = gameState.nonTaggedPlayers - 1
 			end
 		else
 			weightingArray[playername].tags = weightingArray[playername].tags + 100
 		end
 	end
-	if gameState.InfectedPlayers >= gameState.playerCount and gameState.nonInfectedPlayers == 0 then
-		gameState.everyoneInfected = true
+	if gameState.TaggedPlayers >= gameState.playerCount and gameState.nonTaggedPlayers == 0 then
+		gameState.everyoneTagged = true
 	end
 
 	MP.TriggerClientEventJson(-1, "tag_recieveGameState", gameState)
@@ -389,36 +389,36 @@ local function gameRunningLoop()
 	end
 
 	if not gameState.gameEnding and gameState.time > 0 then
-		local infectedCount = 0
-		local nonInfectedCount = 0
+		local taggedCount = 0
+		local nonTaggedCount = 0
 		local playercount = 0
 		for playername,player in pairs(players) do
-			if player.localContact and player.remoteContact and not player.infected then
-				player.infected = true
-				MP.SendChatMessage(-1,""..playername.." has been infected!")
-				MP.TriggerClientEvent(-1, "tag_recieveInfected", playername)
-			elseif player.stats and gameState.time > 5 and not player.infected then
+			if player.localContact and player.remoteContact and not player.tagged then
+				player.tagged = true
+				MP.SendChatMessage(-1,""..playername.." has been tagged!")
+				MP.TriggerClientEvent(-1, "tag_recieveTagged", playername)
+			elseif player.stats and gameState.time > 5 and not player.tagged then
 				if	not player.stats.survivedTime then
 					player.stats.survivedTime = 5
 				end
 				player.stats.survivedTime = player.stats.survivedTime + 1
 			end
 
-			if player.infected then
-				infectedCount = infectedCount + 1
-			elseif not player.infected then
-				nonInfectedCount = nonInfectedCount + 1
+			if player.tagged then
+				taggedCount = taggedCount + 1
+			elseif not player.tagged then
+				nonTaggedCount = nonTaggedCount + 1
 			end
 			playercount = playercount + 1
 		end
-		if infectedCount >= gameState.playerCount and nonInfectedCount == 0 then
-			gameState.everyoneInfected = true
+		if taggedCount >= gameState.playerCount and nonTaggedCount == 0 then
+			gameState.everyoneTagged = true
 		end
-		gameState.InfectedPlayers = infectedCount
-		gameState.nonInfectedPlayers = nonInfectedCount
+		gameState.TaggedPlayers = taggedCount
+		gameState.nonTaggedPlayers = nonTaggedCount
 		gameState.playerCount = playercount
 
-		if gameState.time >= 5 and infectedCount == 0 then
+		if gameState.time >= 5 and taggedCount == 0 then
 			infectRandomPlayer()
 		end
 	end
@@ -426,16 +426,16 @@ local function gameRunningLoop()
 	if not gameState.gameEnding and gameState.time == gameState.roundLength then
 		gameEnd("time")
 		gameState.endtime = gameState.time + 10
-	elseif not gameState.gameEnding and gameState.everyoneInfected == true then
-		gameEnd("infected")
+	elseif not gameState.gameEnding and gameState.everyoneTagged == true then
+		gameEnd("tagged")
 		gameState.endtime = gameState.time + 10
 	elseif gameState.gameEnding and gameState.time == gameState.endtime then
 		gameState.gameRunning = false
-		--MP.TriggerClientEvent(-1, "tag_resetInfected", "data")
+		--MP.TriggerClientEvent(-1, "tag_resetTagged", "data")
 
 		gameState = {}
 		gameState.players = {}
-		gameState.everyoneInfected = false
+		gameState.everyoneTagged = false
 		gameState.gameRunning = false
 		gameState.gameEnding = false
 		gameState.gameEnded = true
@@ -562,16 +562,16 @@ local function ColorPulse(sender_id, sender_name, message, value)
 	end
 end
 
-local function infectorTint(sender_id, sender_name, message, value)
-	if defaultInfectorTint then
-		defaultInfectorTint = false
-		MP.SendChatMessage(sender_id,"setting infector tint to false")
+local function taggerTint(sender_id, sender_name, message, value)
+	if defaultTaggerTint then
+		defaultTaggerTint = false
+		MP.SendChatMessage(sender_id,"setting tagger tint to false")
 	else
-		defaultInfectorTint = true
-		MP.SendChatMessage(sender_id,"setting infector tint to true")
+		defaultTaggerTint = true
+		MP.SendChatMessage(sender_id,"setting tagger tint to true")
 	end
 	if gameState.settings then
-		gameState.settings.infectorTint = defaultInfectorTint
+		gameState.settings.taggerTint = defaultTaggerTint
 	end
 end
 
@@ -636,7 +636,7 @@ commands = {
 	},
 	["greenFadeDist set"] = {
 		["function"] = greenFadeDist,
-		["tooltip"] = "Adjusts how close in meters an infected car needs to be for the screen to start going green",
+		["tooltip"] = "Adjusts how close in meters an tagged car needs to be for the screen to start going green",
 		["usage"] = "meters"
 	},
 	["filterIntensity set"] = {
@@ -646,11 +646,11 @@ commands = {
 	},
 	["ColorPulse toggle"] = {
 		["function"] = ColorPulse,
-		["tooltip"] = "Enabling this makes the infected cars pulse between green and the original color of the car",
+		["tooltip"] = "Enabling this makes the tagged cars pulse between green and the original color of the car",
 	},
-	["infector tint toggle"] = {
-		["function"] = infectorTint,
-		["tooltip"] = "This toggles on or off the vignetting effect on infected players",
+	["tagger tint toggle"] = {
+		["function"] = taggerTint,
+		["tooltip"] = "This toggles on or off the vignetting effect on tagged players",
 	},
 	["ResetAtSpeedAllowed toggle"] = {
 		["function"] = resetToggle,
@@ -699,7 +699,7 @@ function onVehicleDeleted(playerID,vehicleID)
 end
 
 MP.TriggerClientEventJson(-1, "tag_recieveGameState", gameState)
-MP.TriggerClientEvent(-1, "tag_resetInfected", "data")
+MP.TriggerClientEvent(-1, "tag_resetTagged", "data")
 
 MP.RegisterEvent("onChatMessage", "tagChatMessageHandler")
 MP.RegisterEvent("onPlayerDisconnect", "onPlayerDisconnect")

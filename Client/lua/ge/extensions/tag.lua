@@ -127,7 +127,7 @@ local function gameStarting(time)
 	return days, hours , minutes , seconds
 end
 
-local function resetInfected()
+local function resetTagged()
 	for k,serverVehicle in pairs(MPVehicleGE.getVehicles()) do
 		local ID = serverVehicle.gameVehicleID
 		local vehicle = be:getObjectByID(ID)
@@ -292,7 +292,7 @@ local function updateGameState(data)
 			end
 		end
 
-		txt = "Infected "..gamestate.InfectedPlayers.."/"..gamestate.playerCount..", Time Left "..(days or "")..""..(hours or "")..""..(minutes or "")..""..(seconds or "")..""
+		txt = "Tagged "..gamestate.TaggedPlayers.."/"..gamestate.playerCount..", Time Left "..(days or "")..""..(hours or "")..""..(minutes or "")..""..(seconds or "")..""
 
 	elseif time and gamestate.endtime and (gamestate.endtime - time) < 7 then
 
@@ -306,22 +306,22 @@ local function updateGameState(data)
 				skipPlayer = false
 			end
 
-			if data.firstInfected then
-				txt = ""..txt.."\n Was first infected"
+			if data.firstTagged then
+				txt = ""..txt.."\n Was first tagged"
 				skipPlayer = false
 			end
 
 			if stats.infecter then
-				txt = ""..txt.."\n Was infected by : "..stats.infecter..""
+				txt = ""..txt.."\n Was tagged by : "..stats.infecter..""
 				skipPlayer = false
 			end
 
-			if stats.infected then
-				if stats.infected == 1 then
-					txt = ""..txt.."\n Has infected : "..stats.infected.." Player"
+			if stats.tagged then
+				if stats.tagged == 1 then
+					txt = ""..txt.."\n Has tagged : "..stats.tagged.." Player"
 				skipPlayer = false
-				elseif stats.infected ~= 0 then
-					txt = ""..txt.."\n Has infected : "..stats.infected.." Players"
+				elseif stats.tagged ~= 0 then
+					txt = ""..txt.."\n Has tagged : "..stats.tagged.." Players"
 				skipPlayer = false
 				end
 			end
@@ -331,7 +331,7 @@ local function updateGameState(data)
 		end
 
 		local timeLeft = gamestate.endtime - time
-		txt = "Infected "..gamestate.InfectedPlayers.."/"..gamestate.playerCount..", Colors reset in "..math.abs(timeLeft-1).." seconds"
+		txt = "Tagged "..gamestate.TaggedPlayers.."/"..gamestate.playerCount..", Colors reset in "..math.abs(timeLeft-1).." seconds"
 
 	end
 	if txt ~= "" then
@@ -344,29 +344,29 @@ local function updateGameState(data)
 			if stats then
 				if playerName == yourName then
 					gameplay_statistic.metricAdd("Infection/GamesPlayed", 1)
-					if stats.infected and stats.infected > 0 then
-						gameplay_statistic.metricAdd("Infection/TotalInfections", stats.infected)
-						setNewMaxStat("Infection/MostInfectionsInOneGame", stats.infected)
+					if stats.tagged and stats.tagged > 0 then
+						gameplay_statistic.metricAdd("Infection/TotalInfections", stats.tagged)
+						setNewMaxStat("Infection/MostInfectionsInOneGame", stats.tagged)
 					end
 					if stats.survivedTime and stats.survivedTime > 0 then
 						gameplay_statistic.metricAdd("Infection/TotalTimeSurvived.time", stats.survivedTime)
 						setNewMaxStat("Infection/LongestTimeSurvived.time", stats.survivedTime)
 					end
 					if playerData.infecter then
-						gameplay_statistic.metricAdd("Infection/InfectedBy/"..playerData.infecter.."", 1)
+						gameplay_statistic.metricAdd("Infection/TaggedBy/"..playerData.infecter.."", 1)
 					end
-					if playerData.firstInfected then
-						gameplay_statistic.metricAdd("Infection/firstInfected", 1)
+					if playerData.firstTagged then
+						gameplay_statistic.metricAdd("Infection/firstTagged", 1)
 					end
 				else
 					if playerData.infecter == yourName then
-						gameplay_statistic.metricAdd("Infection/InfectedOthers/"..playerName.."", 1)
+						gameplay_statistic.metricAdd("Infection/TaggedOthers/"..playerName.."", 1)
 					end
 					gameplay_statistic.metricAdd("Infection/TimesPlayedWith/"..playerName.."", 1)
 				end
 			end
 		end
-		resetInfected()
+		resetTagged()
 	end
 end
 
@@ -383,7 +383,7 @@ local function sendContact(vehID,localVehID)
 	local vehPlayerName = MPVehicleGE.getNicknameMap()[vehID]
 	if gamestate and gamestate.gameRunning then
 		if gamestate.players[vehPlayerName] and gamestate.players[LocalvehPlayerName] then
-			if gamestate.players[vehPlayerName].infected ~= gamestate.players[LocalvehPlayerName].infected and not gamestate.players[vehPlayerName].contacted then
+			if gamestate.players[vehPlayerName].tagged ~= gamestate.players[LocalvehPlayerName].tagged and not gamestate.players[vehPlayerName].contacted then
 				gamestate.players[vehPlayerName].contacted = true
 				local serverVehID = MPVehicleGE.getServerVehicleID(vehID)
 				local remotePlayerID, vehicleID = string.match(serverVehID, "(%d+)-(%d+)")
@@ -393,7 +393,7 @@ local function sendContact(vehID,localVehID)
 	end
 end
 
-local function recieveInfected(data)
+local function recieveTagged(data)
 	local playerName = data
 	local playerServerName = MPConfig:getNickname()
 	if playerName == playerServerName then
@@ -408,9 +408,9 @@ local function onVehicleSwitched(oldID,ID)
 		curentOwnerName = MPVehicleGE.getVehicleByGameID(ID).ownerName
 	end
 
-	if gamestate.players and gamestate.players[curentOwnerName] and gamestate.players[curentOwnerName].infected then
+	if gamestate.players and gamestate.players[curentOwnerName] and gamestate.players[curentOwnerName].tagged then
 		MPVehicleGE.hideNicknames(false)
-	elseif gamestate.players and gamestate.players[curentOwnerName] and not gamestate.players[curentOwnerName].infected then
+	elseif gamestate.players and gamestate.players[curentOwnerName] and not gamestate.players[curentOwnerName].tagged then
 		MPVehicleGE.hideNicknames(true)
 	end
 end
@@ -468,7 +468,7 @@ local tempLinearColor = Point4F(0, 0, 0, 0)
 local function color(player,vehicle,dt)
 	local veh = getObjectByID(vehicle.gameVehicleID)
 	if not veh then return end
-	if player.infected then
+	if player.tagged then
 		if not vehicle.transition or not vehicle.colortimer then
 			vehicle.transition = defaultTransition
 			vehicle.colortimer = defaultColorTimer
@@ -588,7 +588,7 @@ local focusedVehPos = vec3()
 local otherVehPos = vec3()
 
 local defaultTintColor = Point4F(0.0, 0.25, 0.5,1)
-local infectedTintColor = Point4F(0.5, 0.0, 0.0,1)
+local taggedTintColor = Point4F(0.5, 0.0, 0.0,1)
 
 local function onPreRender(dt)
 	if MPCoreNetwork and not MPCoreNetwork.isMPSession() then return end
@@ -610,26 +610,26 @@ local function onPreRender(dt)
 		end
 	end
 
-	local closestInfected = 100000000
+	local closestTagged = 100000000
 	for k,vehicle in pairs(MPVehicleGE.getVehicles()) do
 		if gamestate.players then
 			local player = gamestate.players[vehicle.ownerName]
 			if player then
 				color(player,vehicle,dt)
 				if currentVehID and currentVehID ~= vehicle.gameVehicleID then
-					if focusedPlayer.infected and not player.infected then
+					if focusedPlayer.tagged and not player.tagged then
 						if curentOwnerName ~= vehicle.ownerName then
 							drawTeamTag(vehicle, "HIDER", survivorTextColor, survivorBackColor)
 						end
-					elseif player.infected then
+					elseif player.tagged then
 						local veh = getObjectByID(vehicle.gameVehicleID)
 						if veh and currentVeh then
 							drawTeamTag(vehicle, "HUNTER", hunterTextColor, hunterBackColor)
 							focusedVehPos:set(be:getObjectOOBBCenterXYZ(currentVehID))
 							otherVehPos:set(be:getObjectOOBBCenterXYZ(vehicle.gameVehicleID))
 							local distance = focusedVehPos:squaredDistance(otherVehPos)
-							if distance < closestInfected then
-								closestInfected = distance
+							if distance < closestTagged then
+								closestTagged = distance
 							end
 						end
 					end
@@ -638,23 +638,23 @@ local function onPreRender(dt)
 		end
 	end
 
-	closestInfected = math.sqrt(closestInfected)
+	closestTagged = math.sqrt(closestTagged)
 
 	local tempSetting = defaultgreenFadeDistance
 	if gamestate.settings then
 		tempSetting = gamestate.settings.greenFadeDistance
 	end
-	distancecolor = math.min(1,1 -(closestInfected/(tempSetting or defaultgreenFadeDistance)))
+	distancecolor = math.min(1,1 -(closestTagged/(tempSetting or defaultgreenFadeDistance)))
 
 	if vignetteShaderAPI then
 		vignetteShaderAPI.setColor(defaultTintColor)
 	end
 
-	if gamestate.settings and gamestate.settings.infectorTint and focusedPlayer.infected then
+	if gamestate.settings and gamestate.settings.taggerTint and focusedPlayer.tagged then
 		distancecolor = gamestate.settings.distancecolor or 0
 		if vignetteShaderAPI then
 			distancecolor = distancecolor + 0.2
-			vignetteShaderAPI.setColor(infectedTintColor)
+			vignetteShaderAPI.setColor(taggedTintColor)
 		end
 	end
 
@@ -691,11 +691,11 @@ local function onVehicleColorChanged(vehID,index,paint)
 end
 
 local function onExtensionUnloaded()
-	resetInfected()
+	resetTagged()
 end
 
-if MPGameNetwork then AddEventHandler("tag_recieveInfected", recieveInfected) end
-if MPGameNetwork then AddEventHandler("tag_resetInfected", resetInfected) end
+if MPGameNetwork then AddEventHandler("tag_recieveTagged", recieveTagged) end
+if MPGameNetwork then AddEventHandler("tag_resetTagged", resetTagged) end
 if MPGameNetwork then AddEventHandler("tag_recieveGameState", recieveGameState) end
 if MPGameNetwork then AddEventHandler("tag_updateGameState", updateGameState) end
 
@@ -705,7 +705,7 @@ M.requestGameState = requestGameState
 M.sendContact = sendContact
 M.onPreRender = onPreRender
 M.onVehicleSwitched = onVehicleSwitched
-M.resetInfected = resetInfected
+M.resetTagged = resetTagged
 M.onExtensionUnloaded = onExtensionUnloaded
 M.onVehicleSpawned = onVehicleSpawned
 M.onVehicleColorChanged = onVehicleColorChanged
