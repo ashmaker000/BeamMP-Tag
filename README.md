@@ -1,4 +1,5 @@
 # BeamMP Tag Mod
+<img width="2560" height="1440" alt="screenshot_2026-02-05_12-55-50" src="https://github.com/user-attachments/assets/e349c6ac-7763-4237-9360-4276fd9c722c" />
 
 BeamMP-Tag is a team-focused variant of the BeamMP-Outbreak mod BY Olrosse. It replaces the infection terminology with a color-based tagging experience (red/blue) and exposes a `/tag` command suite for managing rounds, teams, and visual effects.
 
