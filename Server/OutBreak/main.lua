@@ -160,7 +160,7 @@ local function gameSetup(time)
 			if not weightingArray[Player] then
 				weightingArray[Player] = {}
 				weightingArray[Player].games = 1
-				weightingArray[Player].infections = 1
+				weightingArray[Player].tags = 1
 			else
 				weightingArray[Player].games = weightingArray[Player].games + 1
 			end
@@ -230,16 +230,16 @@ local function infectRandomPlayer()
 	local weightRatio = 0
 	for playername,player in pairs(players) do
 
-		local infections = weightingArray[playername].infections
+		local tags = weightingArray[playername].tags
 		local games = weightingArray[playername].games
 		local playerCount = gameState.playerCount
 
-		local weight = math.max(1,(1/((games/infections)/playerCount))*100)
+		local weight = math.max(1,(1/((games/tags)/playerCount))*100)
 		weightingArray[playername].startNumber = weightRatio
 		weightRatio = weightRatio + weight
 		weightingArray[playername].endNumber = weightRatio
 		weightingArray[playername].weightRatio = weightRatio
-		--print(playername,weightingArray[playername].endNumber - weightingArray[playername].startNumber,weightingArray[playername].startNumber , weightingArray[playername].endNumber,weightingArray[playername].infections,weightingArray[playername].games,gameState.playerCount)
+		--print(playername,weightingArray[playername].endNumber - weightingArray[playername].startNumber,weightingArray[playername].startNumber , weightingArray[playername].endNumber,weightingArray[playername].tags,weightingArray[playername].games,gameState.playerCount)
 	end
 
 	local randomID = math.random(1, math.floor(weightRatio))
@@ -263,7 +263,7 @@ local function infectRandomPlayer()
 				gameState.nonInfectedPlayers = gameState.nonInfectedPlayers - 1
 			end
 		else
-			weightingArray[playername].infections = weightingArray[playername].infections + 100
+			weightingArray[playername].tags = weightingArray[playername].tags + 100
 		end
 	end
 	if gameState.InfectedPlayers >= gameState.playerCount and gameState.nonInfectedPlayers == 0 then
@@ -356,14 +356,14 @@ local function gameStarting()
 		end
 	end
 
-	MP.SendChatMessage(-1,"Infection game started, you have to survive for "..(days or "")..""..(hours or "")..""..(minutes or "")..""..(seconds or "").."")
+	MP.SendChatMessage(-1,"Tag game started, you have to survive for "..(days or "")..""..(hours or "")..""..(minutes or "")..""..(seconds or "").."")
 end
 
 local function gameRunningLoop()
 	local players = gameState.players
 
 	if gameState.time < 0 then
-		MP.SendChatMessage(-1,"Infection game starting in "..math.abs(gameState.time).." second")
+		MP.SendChatMessage(-1,"Tag game starting in "..math.abs(gameState.time).." second")
 
 	elseif gameState.time == 0 then
 		gameStarting()
@@ -478,7 +478,7 @@ MP.CreateEventTimer("second",1000)
 local commands = {}
 
 local function help(sender_id, sender_name, message, variable)
-	MP.SendChatMessage(sender_id,"Infection command list")
+	MP.SendChatMessage(sender_id,"Tag command list")
 
 	for k,v in pairs(commands) do
 		local usage
@@ -487,7 +487,7 @@ local function help(sender_id, sender_name, message, variable)
 		else
 			usage = ""
 		end
-		MP.SendChatMessage(sender_id,"/infection "..k..", "..usage.." "..v.tooltip.."")
+		MP.SendChatMessage(sender_id,"/tag "..k..", "..usage.." "..v.tooltip.."")
 	end
 end
 
@@ -618,12 +618,12 @@ commands = {
 	},
 	["start"] = {
 		["function"] = start,
-		["tooltip"] = "starts infection game",
+		["tooltip"] = "starts tag game",
 		["usage"] = "optional time in minutes"
 	},
 	["stop"] = {
 		["function"] = stop,
-		["tooltip"] = "stops infection game",
+		["tooltip"] = "stops tag game",
 	},
 	["reset"] = {
 		["function"] = reset,
@@ -665,7 +665,7 @@ commands = {
 --Chat Commands
 function outbreakChatMessageHandler(sender_id, sender_name, message)
 	local msgStart = string.match(message,"[^%s]+")
-	if msgStart == "/outbreak" or msgStart == "/infection" then
+	if msgStart == "/tag" or msgStart == "/tag" then
 		local commandstringraw = string.sub(message,string.len(msgStart)+2)
 		local commandstring, variable = string.match(commandstringraw,"^(.+) (%d*%.?%d*)$")
 		local commandStringFinal = commandstring or commandstringraw
@@ -673,11 +673,11 @@ function outbreakChatMessageHandler(sender_id, sender_name, message)
 		if commands[commandStringFinal] then
 			commands[commandStringFinal]["function"](sender_id, sender_name, message ,tonumber(variable))
 		else
-			MP.SendChatMessage(sender_id,"command not found, type /infection help for a list of infection commands")
+			MP.SendChatMessage(sender_id,"command not found, type /tag help for a list of tag commands")
 		end
 		return 1
 	elseif string.sub(message,1,5) == "/help" then
-		MP.SendChatMessage(sender_id,"type /infection help for a list of infection commands")
+		MP.SendChatMessage(sender_id,"type /tag help for a list of tag commands")
 		return 1
 	end
 end

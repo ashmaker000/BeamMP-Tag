@@ -206,7 +206,7 @@ local function updateGameState(data)
 	local txt = ""
 
 	if gamestate.gameRunning and time and time == -4 then
-		if TriggerServerEvent then 
+		if TriggerServerEvent then
 			TriggerServerEvent("outbreak_clientReady","nil")
 		end
 	end
@@ -435,13 +435,14 @@ if ffi and ffi.C then
 end
 local drawTextAdvanced = ffiFound and ffi.C.BNG_DBG_DRAW_TextAdvanced or nop
 
-
-local textRoundColor = color(255,255,255,254)
-local backRoundColor = color(200,50,50,200)
+local hunterTextColor = color(255, 0, 0, 255)
+local hunterBackColor = color(80, 0, 0, 200)
+local survivorTextColor = color(0, 120, 255, 255)
+local survivorBackColor = color(0, 0, 80, 200)
 
 local vehTagPos = vec3()
 
-local function drawSurvivorTag(vehicle)
+local function drawTeamTag(vehicle, text, txtColor, backColor)
 	vehTagPos:set(be:getObjectOOBBCenterXYZ(vehicle.gameVehicleID))
 	local vehicleHeight = 0
 	if not vehicle.vehicleHeight or vehicle.vehicleHeight == 0 then
@@ -454,7 +455,7 @@ local function drawSurvivorTag(vehicle)
 		vehicleHeight = vehicle.vehicleHeight
 	end
 	vehTagPos.z = vehTagPos.z + (vehicleHeight * 0.5) + 0.2
-	drawTextAdvanced(vehTagPos.x, vehTagPos.y, vehTagPos.z, String(" Survivor "), textRoundColor, true, false, backRoundColor, false, false)
+	drawTextAdvanced(vehTagPos.x, vehTagPos.y, vehTagPos.z, String(" "..text.." "), txtColor, true, false, backColor, false, false)
 end
 
 local distancecolor = -1
@@ -465,97 +466,90 @@ local defaultColorTimer = 1.6
 local tempLinearColor = Point4F(0, 0, 0, 0)
 
 local function color(player,vehicle,dt)
+	local veh = getObjectByID(vehicle.gameVehicleID)
+	if not veh then return end
 	if player.infected then
 		if not vehicle.transition or not vehicle.colortimer then
 			vehicle.transition = defaultTransition
 			vehicle.colortimer = defaultColorTimer
 		end
-		local veh = getObjectByID(vehicle.gameVehicleID)
-		if veh then
-			if not vehicle.originalColor then
-				vehicle.originalColor = veh.color
-			end
-			if not vehicle.originalcolorPalette0 then
-				vehicle.originalcolorPalette0 = veh.colorPalette0
-			end
-			if not vehicle.originalcolorPalette1 then
-				vehicle.originalcolorPalette1 = veh.colorPalette1
-			end
-
-			if not gamestate.gameEnding or (gamestate.endtime - gamestate.time) > 1 then
-				local transition = vehicle.transition
-				if transition > 0 or gamestate.settings.ColorPulse then
-					vehicle.colortimer = vehicle.colortimer + (dt*2.6)
-					local colortimer = vehicle.colortimer
-					local sineState = (1+math.sin(colortimer))/2
-					local color = 0.6 - (1*sineState*0.2)
-					local colorFade = (1*sineState)*math.max(0.6,transition)
-					local greenFade = 1 -((1*sineState)*(math.max(0.6,transition)))
-					if not gamestate.settings.ColorPulse then
-						color = 0.6
-						colorFade = transition
-						greenFade = 1 - transition
-					end
-					local colorAdd = (color*greenFade)
-
-					tempLinearColor.x = vehicle.originalColor.x*colorFade
-					tempLinearColor.y = (vehicle.originalColor.y*colorFade) + colorAdd
-					tempLinearColor.z = vehicle.originalColor.z*colorFade
-					tempLinearColor.w = vehicle.originalColor.w
-					veh.color = tempLinearColor
-
-					tempLinearColor.x = vehicle.originalcolorPalette0.x*colorFade
-					tempLinearColor.y = (vehicle.originalcolorPalette0.y*colorFade) + colorAdd
-					tempLinearColor.z = vehicle.originalcolorPalette0.z*colorFade
-					tempLinearColor.w = vehicle.originalcolorPalette0.w
-					veh.colorPalette0 = tempLinearColor
-
-					tempLinearColor.x = vehicle.originalcolorPalette1.x*colorFade
-					tempLinearColor.y = (vehicle.originalcolorPalette1.y*colorFade) + colorAdd
-					tempLinearColor.z = vehicle.originalcolorPalette1.z*colorFade
-					tempLinearColor.w = vehicle.originalcolorPalette1.w
-					veh.colorPalette1 = tempLinearColor
-
-					vehicle.transition = math.max(0,transition - dt)
-
-					vehicle.color = color
-					vehicle.colorFade = colorFade
-					vehicle.greenFade = greenFade
+		if not vehicle.originalColor then vehicle.originalColor = veh.color end
+		if not vehicle.originalcolorPalette0 then vehicle.originalcolorPalette0 = veh.colorPalette0 end
+		if not vehicle.originalcolorPalette1 then vehicle.originalcolorPalette1 = veh.colorPalette1 end
+		if not gamestate.gameEnding or (gamestate.endtime - gamestate.time) > 1 then
+			local transition = vehicle.transition
+			if transition > 0 or gamestate.settings.ColorPulse then
+				vehicle.colortimer = vehicle.colortimer + (dt*2.6)
+				local colortimer = vehicle.colortimer
+				local sineState = (1+math.sin(colortimer))/2
+				local colorValue = 0.6 - (1*sineState*0.2)
+				local colorFade = (1*sineState)*math.max(0.6,transition)
+				local redFade = 1 -((1*sineState)*(math.max(0.6,transition)))
+				if not gamestate.settings.ColorPulse then
+					colorValue = 0.6
+					colorFade = transition
+					redFade = 1 - transition
 				end
-			elseif (gamestate.endtime - gamestate.time) <= 1 then
-				local transition = vehicle.transition
-				if transition < 1 then
-					local color = vehicle.color or 0
-					local colorFade = vehicle.colorFade or 1
-					local greenFade = vehicle.greenFade or 0
-					--dump(k,colorFade,greenFade,transition,vehicle.colortimer)
-					local colorAdd = (color*greenFade)
+				local colorAdd = (colorValue*redFade)
+				tempLinearColor.x = vehicle.originalColor.x*colorFade + colorAdd
+				tempLinearColor.y = vehicle.originalColor.y*colorFade
+				tempLinearColor.z = vehicle.originalColor.z*colorFade
+				tempLinearColor.w = vehicle.originalColor.w
+				veh.color = tempLinearColor
 
-					tempLinearColor.x = vehicle.originalColor.x*colorFade
-					tempLinearColor.y = (vehicle.originalColor.y*colorFade) + colorAdd
-					tempLinearColor.z = vehicle.originalColor.z*colorFade
-					tempLinearColor.w = vehicle.originalColor.w
-					veh.color = tempLinearColor
+				tempLinearColor.x = vehicle.originalcolorPalette0.x*colorFade + colorAdd
+				tempLinearColor.y = vehicle.originalcolorPalette0.y*colorFade
+				tempLinearColor.z = vehicle.originalcolorPalette0.z*colorFade
+				tempLinearColor.w = vehicle.originalcolorPalette0.w
+				veh.colorPalette0 = tempLinearColor
 
-					tempLinearColor.x = vehicle.originalcolorPalette0.x*colorFade
-					tempLinearColor.y = (vehicle.originalcolorPalette0.y*colorFade) + colorAdd
-					tempLinearColor.z = vehicle.originalcolorPalette0.z*colorFade
-					tempLinearColor.w = vehicle.originalcolorPalette0.w
-					veh.colorPalette0 = tempLinearColor
+				tempLinearColor.x = vehicle.originalcolorPalette1.x*colorFade + colorAdd
+				tempLinearColor.y = vehicle.originalcolorPalette1.y*colorFade
+				tempLinearColor.z = vehicle.originalcolorPalette1.z*colorFade
+				tempLinearColor.w = vehicle.originalcolorPalette1.w
+				veh.colorPalette1 = tempLinearColor
 
-					tempLinearColor.x = vehicle.originalcolorPalette1.x*colorFade
-					tempLinearColor.y = (vehicle.originalcolorPalette1.y*colorFade) + colorAdd
-					tempLinearColor.z = vehicle.originalcolorPalette1.z*colorFade
-					tempLinearColor.w = vehicle.originalcolorPalette1.w
-					veh.colorPalette1 = tempLinearColor
+				vehicle.transition = math.max(0,transition - dt)
+				vehicle.colorFade = colorFade
+				vehicle.greenFade = redFade
+			end
+		elseif (gamestate.endtime - gamestate.time) <= 1 then
+			local transition = vehicle.transition
+			if transition < 1 then
+				local colorValue = vehicle.color or 0
+				local colorFade = vehicle.colorFade or 1
+				local redFade = vehicle.greenFade or 0
+				local colorAdd = (colorValue*redFade)
+				tempLinearColor.x = vehicle.originalColor.x*colorFade + colorAdd
+				tempLinearColor.y = vehicle.originalColor.y*colorFade
+				tempLinearColor.z = vehicle.originalColor.z*colorFade
+				tempLinearColor.w = vehicle.originalColor.w
+				veh.color = tempLinearColor
 
-					vehicle.colorFade = math.min(1,colorFade + dt)
-					vehicle.greenFade = math.max(0,greenFade - dt)
-					vehicle.colortimer = 1.6
-					vehicle.transition = math.min(1,transition + dt)
-				end
+				tempLinearColor.x = vehicle.originalcolorPalette0.x*colorFade + colorAdd
+				tempLinearColor.y = vehicle.originalcolorPalette0.y*colorFade
+				tempLinearColor.z = vehicle.originalcolorPalette0.z*colorFade
+				tempLinearColor.w = vehicle.originalcolorPalette0.w
+				veh.colorPalette0 = tempLinearColor
+
+				tempLinearColor.x = vehicle.originalcolorPalette1.x*colorFade + colorAdd
+				tempLinearColor.y = vehicle.originalcolorPalette1.y*colorFade
+				tempLinearColor.z = vehicle.originalcolorPalette1.z*colorFade
+				tempLinearColor.w = vehicle.originalcolorPalette1.w
+				veh.colorPalette1 = tempLinearColor
+
+				vehicle.colorFade = math.min(1,colorFade + dt)
+				vehicle.greenFade = math.max(0,redFade - dt)
+				vehicle.colortimer = 1.6
+				vehicle.transition = math.min(1,transition + dt)
 			end
 		end
+	else
+		if not vehicle.hiderOriginalColor then vehicle.hiderOriginalColor = veh.color end
+		local blueColor = Point4F(0.1, 0.4, 1.0, veh.color.w)
+		veh.color = blueColor
+		veh.colorPalette0 = blueColor
+		veh.colorPalette1 = blueColor
 	end
 end
 
@@ -593,8 +587,8 @@ end
 local focusedVehPos = vec3()
 local otherVehPos = vec3()
 
-local defaultTintColor = Point4F(0, 0.12, 0,1)
-local infectedTintColor = Point4F(0, 0.15, 0,1)
+local defaultTintColor = Point4F(0.0, 0.25, 0.5,1)
+local infectedTintColor = Point4F(0.5, 0.0, 0.0,1)
 
 local function onPreRender(dt)
 	if MPCoreNetwork and not MPCoreNetwork.isMPSession() then return end
@@ -625,11 +619,12 @@ local function onPreRender(dt)
 				if currentVehID and currentVehID ~= vehicle.gameVehicleID then
 					if focusedPlayer.infected and not player.infected then
 						if curentOwnerName ~= vehicle.ownerName then
-							drawSurvivorTag(vehicle)
+							drawTeamTag(vehicle, "HIDER", survivorTextColor, survivorBackColor)
 						end
 					elseif player.infected then
 						local veh = getObjectByID(vehicle.gameVehicleID)
 						if veh and currentVeh then
+							drawTeamTag(vehicle, "HUNTER", hunterTextColor, hunterBackColor)
 							focusedVehPos:set(be:getObjectOOBBCenterXYZ(currentVehID))
 							otherVehPos:set(be:getObjectOOBBCenterXYZ(vehicle.gameVehicleID))
 							local distance = focusedVehPos:squaredDistance(otherVehPos)
