@@ -13,7 +13,7 @@ BeamMP-Tag is a team-focused variant of the BeamMP-Outbreak mod BY Olrosse. It r
 
 ## Setup
 1. Place the `Resources/Client` and `Resources/Server` folders into your BeamMP server directory.
-2. Start a round by using `tag.lua` in the chat box.
+2. Start a round by using `/tag` in the chat box.
 3. After a few seconds the round will start and the person being Tag will turn to Red and will need to tag every one in Blue.
 
 ## Commands
