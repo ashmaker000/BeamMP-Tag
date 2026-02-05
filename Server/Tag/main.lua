@@ -46,7 +46,7 @@ local function seconds_to_days_hours_minutes_seconds(total_seconds) --modified c
 	end
 	return time_days ,time_hours , time_minutes , time_seconds
 end
-
+ 
 local function compareTable(gameState,tempTable,lastState)
 	for varableName,varable in pairs(gameState) do
 		if type(varable) == "table" then
