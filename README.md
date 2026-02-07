@@ -9,7 +9,7 @@ BeamMP-Tag is a team-focused variant of the BeamMP-Outbreak mod BY Olrosse. It r
 - Team-colored nametags and postFX per role.
 - `/tag` chat commands to start/stop/reset rounds, tweak vignette strength, and adjust team settings.
 - Configurable per-team colors (red & blue by default, now extended to yellow and purple).
-- Server-driven state sync via the `outbreak_*`/now `tag_*` events so clients know their teammates.
+- Server-driven state sync via the `tag_*` events so clients know their teammates.
 
 ## Setup
 1. Place the `Resources/Client` and `Resources/Server` folders into your BeamMP server directory.
