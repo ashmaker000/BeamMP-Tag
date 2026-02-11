@@ -12,8 +12,8 @@ BeamMP-Tag is a team-focused variant of the BeamMP-Outbreak mod BY Olrosse. It r
 - Server-driven state sync via the `tag_*` events so clients know their teammates.
 
 ## Setup
-1. Place the `Resources/Client` and `Resources/Server` folders into your BeamMP server directory.
-2. Start a round by using `/tag` in the chat box.
+1. Place the `BeamMP-Tag.zip` in your Clients folder and create a folder called `Tag` and add `main.lua` into your new folder.
+2. Start a round by using `/tag start` in the chat box.
 3. After a few seconds the round will start and the person being Tag will turn to Red and will need to tag every one in Blue.
 
 ## Commands
