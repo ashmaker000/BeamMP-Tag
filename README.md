@@ -14,7 +14,7 @@ BeamMP-Tag is a tag/infection-style multiplayer mode with server-authoritative r
 
 ## Setup
 1. Unpack `BeamMP-Tag.zip` and your see `Client` and `Server` folders
-2. Go into `Client folder` place the `BeamMP-Tag.zip` in your Clients folder, then head to `Server folder` and create a folder called `Tag` and add `main.lua` into your new folder.
+2. Go into your `Client folder` on the server and place the `BeamMP-Tag.zip`, then head to the `Server folder` and create a folder called `Tag` and add `main.lua` into your new folder.
 3. Start a round by using `/tag start` in the chat box.
 4. After a few seconds the round will start and the person being Tag will turn to Red and will need to tag every one in Blue.
 
