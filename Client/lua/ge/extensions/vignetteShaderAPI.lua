@@ -8,16 +8,22 @@ local enabled = false
 
 local function setEnabled(state)
 	enabled = state
+	if not vignettePostFX then return end
 	vignettePostFX.isEnabled = state
-	vignettePostFX.color = Point4F(0, 0.15, 0,1)
+	if state then
+		vignettePostFX.color = Point4F(0.0, 0.25, 0.5, 1)
+	end
 end
 
 local function setDistance(distancecolor)
-	 vignettePostFX.innerRadius = 1 - math.min(0,distancecolor)
-	 vignettePostFX.outerRadius = 2.1 - math.min(0,distancecolor)
+	if not vignettePostFX then return end
+	local d = math.max(0, tonumber(distancecolor) or 0)
+	vignettePostFX.innerRadius = 1 - d
+	vignettePostFX.outerRadius = 2.1 - d
 end
 
 local function resetVignette()
+	if not vignettePostFX then return end
 	vignettePostFX.innerRadius = 0
 	vignettePostFX.outerRadius = 0
 	vignettePostFX.center = Point2F(0.5, 0.5)
@@ -49,6 +55,6 @@ M.setOuterRadius = setOuterRadius
 M.setColor = setColor
 
 
-M.onInit = function() setExtensionUnloadMode(M, "manual") end
+M.onInit = function() setExtensionUnloadMode("vignetteShaderAPI", "manual") end
 
 return M

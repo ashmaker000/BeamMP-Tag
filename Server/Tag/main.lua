@@ -10,19 +10,94 @@ gameState.everyoneTagged = false
 gameState.gameRunning = false
 gameState.gameEnding = false
 
-local includedPlayers = {} --TODO make these do something
-local excludedPlayers = {} --TODO make these do something
 
 local roundLength = 5*60 -- length of the game in seconds
 local defaultGreenFadeDistance = 100 -- how close the tagger has to be for the screen to start to turn green
 local defaultColorPulse = false -- if the car color should pulse between the car color and green
 local defaultTaggerTint = true -- if the tagger should have a green tint
-local defaultDistancecolor = 0.5 -- max intensity of the green filter
+local defaultDistancecolor = 0.3 -- max intensity of the green filter (softer default)
 local disableResetsWhenMoving = true
 local maxResetMovingSpeed = 2
 
+local TEAM_COLORS = {"red", "blue", "purple", "white", "green", "yellow"}
+local defaultMode = "multiteam" -- classic|multiteam
+local defaultTeamCount = 6
+local defaultInitialTaggers = 1
+local defaultWinCondition = "classic" -- classic|lastteam
+
+local manualTeamAssignments = {} -- playerName -> color
+local manualInitialTaggers = {} -- playerName -> true
+
+local function clamp(n, lo, hi)
+	if n < lo then return lo end
+	if n > hi then return hi end
+	return n
+end
+
+local function trim(s)
+	return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function shuffle(arr)
+	for i = #arr, 2, -1 do
+		local j = math.random(1, i)
+		arr[i], arr[j] = arr[j], arr[i]
+	end
+	return arr
+end
+
+local function resolvePlayerNameByQuery(query)
+	query = trim(query)
+	if query == "" then return nil end
+	local players = MP.GetPlayers()
+	for _, name in pairs(players) do
+		if tostring(name) == query then return tostring(name) end
+	end
+	local q = string.lower(query)
+	for _, name in pairs(players) do
+		if string.lower(tostring(name)) == q then return tostring(name) end
+	end
+	for _, name in pairs(players) do
+		if string.find(string.lower(tostring(name)), q, 1, true) then return tostring(name) end
+	end
+	return nil
+end
+
+local function getEnabledTeamColors()
+	local count = clamp(tonumber(defaultTeamCount) or 2, 2, #TEAM_COLORS)
+	local out = {}
+	for i=1,count do out[#out+1] = TEAM_COLORS[i] end
+	return out
+end
+
+local function getSurvivorTeamCounts()
+	local counts = {}
+	for _, c in ipairs(TEAM_COLORS) do counts[c] = 0 end
+	for _, player in pairs(gameState.players or {}) do
+		if type(player) == "table" and not player.tagged then
+			local t = tostring(player.team or "blue"):lower()
+			if counts[t] ~= nil then counts[t] = counts[t] + 1 end
+		end
+	end
+	return counts
+end
+
+local function aliveSurvivorTeams()
+	local counts = getSurvivorTeamCounts()
+	local alive = 0
+	local lastTeam = nil
+	for _, c in ipairs(TEAM_COLORS) do
+		if (counts[c] or 0) > 0 then
+			alive = alive + 1
+			lastTeam = c
+		end
+	end
+	return alive, lastTeam, counts
+end
+
 MP.RegisterEvent("tag_clientReady","clientReady")
 MP.RegisterEvent("tag_onContactRecieve","onContact")
+MP.RegisterEvent("tag_onContactReceive","onContact")
 MP.RegisterEvent("tag_requestGameState","requestGameState")
 MP.TriggerClientEvent(-1, "tag_resetTagged", "data")
 
@@ -143,16 +218,111 @@ function onContact(localPlayerID, data)
 	end
 end
 
+local function assignTeamsForRound()
+	local enabled = getEnabledTeamColors()
+	local playerNames = {}
+	for name, pdata in pairs(gameState.players or {}) do
+		if type(pdata) == "table" then playerNames[#playerNames+1] = name end
+	end
+	if #playerNames == 0 then return end
+	shuffle(playerNames)
+
+	local buckets = {}
+	for _, c in ipairs(enabled) do buckets[c] = 0 end
+
+	-- manual assignments first
+	for _, name in ipairs(playerNames) do
+		local forced = manualTeamAssignments[name]
+		if forced and buckets[forced] ~= nil then
+			gameState.players[name].team = forced
+			buckets[forced] = buckets[forced] + 1
+		end
+	end
+
+	-- fill remaining as balanced as possible
+	for _, name in ipairs(playerNames) do
+		if not gameState.players[name].team then
+			local bestCount = nil
+			local candidates = {}
+			for _, c in ipairs(enabled) do
+				local n = buckets[c] or 0
+				if bestCount == nil or n < bestCount then
+					bestCount = n
+					candidates = {c}
+				elseif n == bestCount then
+					candidates[#candidates+1] = c
+				end
+			end
+			local pick = candidates[math.random(1, #candidates)]
+			gameState.players[name].team = pick
+			buckets[pick] = (buckets[pick] or 0) + 1
+		end
+	end
+
+	gameState.teamCounts = buckets
+	gameState.enabledTeams = enabled
+end
+
+local function applyInitialTaggers()
+	local target = clamp(tonumber(defaultInitialTaggers) or 1, 1, 64)
+	local candidates = {}
+	for name, pdata in pairs(gameState.players or {}) do
+		if type(pdata) == "table" then candidates[#candidates+1] = name end
+	end
+	if #candidates == 0 then return end
+
+	local selected = {}
+	for name,_ in pairs(manualInitialTaggers) do
+		if gameState.players[name] and not selected[name] then
+			selected[name] = true
+		end
+	end
+
+	shuffle(candidates)
+	for _, name in ipairs(candidates) do
+		local count = 0; for _ in pairs(selected) do count = count + 1 end
+		if count >= target then break end
+		selected[name] = true
+	end
+
+	local names = {}
+	local taggedCount = 0
+	for name,_ in pairs(selected) do
+		local p = gameState.players[name]
+		if p and not p.tagged then
+			p.tagged = true
+			p.firstTagged = true
+			p.localContact = true
+			p.remoteContact = true
+			names[#names+1] = name
+			taggedCount = taggedCount + 1
+			MP.TriggerClientEvent(-1, "tag_recieveTagged", name)
+		end
+	end
+
+	if taggedCount > 0 then
+		gameState.TaggedPlayers = taggedCount
+		gameState.nonTaggedPlayers = math.max(0, (gameState.playerCount or 0) - taggedCount)
+		gameState.oneTagged = true
+		MP.SendChatMessage(-1, "Initial tagger(s): " .. table.concat(names, ", "))
+	end
+end
+
 local function gameSetup(time)
 	gameState = {}
 	gameState.players = {}
 	gameState.settings = {
-		GreenFadeDistance = defaultGreenFadeDistance,
+		greenFadeDistance = defaultGreenFadeDistance,
 		ColorPulse = defaultColorPulse,
 		taggerTint = defaultTaggerTint,
 		distancecolor = defaultDistancecolor,
 		disableResetsWhenMoving = disableResetsWhenMoving,
-		maxResetMovingSpeed = maxResetMovingSpeed
+		maxResetMovingSpeed = maxResetMovingSpeed,
+		mode = defaultMode,
+		teamCount = defaultTeamCount,
+		initialTaggers = defaultInitialTaggers,
+		winCondition = defaultWinCondition,
+		enabledTeams = getEnabledTeamColors()
 		}
 	local playerCount = 0
 	for ID,Player in pairs(MP.GetPlayers()) do
@@ -196,6 +366,12 @@ local function gameSetup(time)
 	gameState.gameEnding = false
 	gameState.gameEnded = false
 
+	if defaultMode == "multiteam" then
+		assignTeamsForRound()
+	end
+	-- Delay initial tagger reveal until round actually begins.
+	gameState.pendingInitialTaggers = true
+
 	MP.TriggerClientEventJson(-1, "tag_recieveGameState", gameState)
 end
 
@@ -215,12 +391,15 @@ local function gameEnd(reason)
 		MP.SendChatMessage(-1,"Game over,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
 	elseif reason == "tagged" then
 		MP.SendChatMessage(-1,"Game over, no survivors")
+	elseif reason == "lastteam" then
+		local wt = tostring(gameState.winningTeam or "unknown")
+		MP.SendChatMessage(-1,"Game over, team "..wt.." wins!")
 	elseif reason == "manual" then
 		--MP.SendChatMessage(-1,"Game stopped,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
 		MP.SendChatMessage(-1,"Game stopped, Everyone Looses")
 		gameState.endtime = gameState.time + 10
 	else
-		MP.SendChatMessage(-1,"Game stopped for uknown reason,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
+		MP.SendChatMessage(-1,"Game stopped for unknown reason,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
 	end
 end
 
@@ -411,6 +590,15 @@ local function gameRunningLoop()
 			end
 			playercount = playercount + 1
 		end
+		if defaultMode == "multiteam" and defaultWinCondition == "lastteam" then
+			local aliveTeams, teamName = aliveSurvivorTeams()
+			if aliveTeams <= 1 and teamName then
+				gameState.winningTeam = teamName
+				gameEnd("lastteam")
+				gameState.endtime = gameState.time + 10
+			end
+		end
+
 		if taggedCount >= gameState.playerCount and nonTaggedCount == 0 then
 			gameState.everyoneTagged = true
 		end
@@ -418,7 +606,12 @@ local function gameRunningLoop()
 		gameState.nonTaggedPlayers = nonTaggedCount
 		gameState.playerCount = playercount
 
-		if gameState.time >= 5 and taggedCount == 0 then
+		if gameState.time >= 5 and gameState.pendingInitialTaggers then
+			applyInitialTaggers()
+			gameState.pendingInitialTaggers = false
+		end
+
+		if gameState.time >= 5 and taggedCount == 0 and not gameState.oneTagged then
 			infectRandomPlayer()
 		end
 	end
@@ -457,7 +650,7 @@ local autoStartWaitInSeconds = 600
 function timer()
 	if gameState.gameRunning then
 		gameRunningLoop()
-	elseif autoStart and MP.GetPlayerCount() > -1 then
+	elseif autoStart and MP.GetPlayerCount() > 1 then
 		autoStartTimer = autoStartTimer + 1
 		if autoStartTimer >= autoStartWaitInSeconds then
 			autoStartTimer = 0
@@ -479,30 +672,30 @@ local commands = {}
 
 local function help(sender_id, sender_name, message, variable)
 	MP.SendChatMessage(sender_id,"Tag command list")
+	MP.SendChatMessage(sender_id,"Normalized syntax:")
+	MP.SendChatMessage(sender_id,"  /tag start [minutes]")
+	MP.SendChatMessage(sender_id,"  /tag stop")
+	MP.SendChatMessage(sender_id,"  /tag reset")
+	MP.SendChatMessage(sender_id,"  /tag set mode classic|multiteam")
+	MP.SendChatMessage(sender_id,"  /tag set teamCount <2..6>")
+	MP.SendChatMessage(sender_id,"  /tag set taggers <count>")
+	MP.SendChatMessage(sender_id,"  /tag set winCondition classic|lastteam")
+	MP.SendChatMessage(sender_id,"  /tag set gameLength <minutes>")
+	MP.SendChatMessage(sender_id,"  /tag set greenFadeDist <meters>")
+	MP.SendChatMessage(sender_id,"  /tag set filterIntensity <0..1>")
+	MP.SendChatMessage(sender_id,"  /tag set maxResetSpeed <speed>")
+	MP.SendChatMessage(sender_id,"  /tag toggle colorPulse|taggerTint|resetAtSpeedAllowed")
+	MP.SendChatMessage(sender_id,"  /tag teams random|set <username> <color>|clear <username>|list")
+	MP.SendChatMessage(sender_id,"  /tag taggers add|remove <username>|clear|list")
 
-	for k,v in pairs(commands) do
-		local usage
-		if v.usage then
-			usage = v.usage..","
-		else
-			usage = ""
-		end
+	local keys = {}
+	for k,_ in pairs(commands) do table.insert(keys, k) end
+	table.sort(keys)
+	for _,k in ipairs(keys) do
+		local v = commands[k]
+		local usage = v.usage and (v.usage..",") or ""
 		MP.SendChatMessage(sender_id,"/tag "..k..", "..usage.." "..v.tooltip.."")
 	end
-end
-
-local function join(sender_id, sender_name, message, number)
-	local playerid = number or sender_id
-	local playername = MP.GetPlayerName(playerid)
-	includedPlayers[playerid] = true
-	MP.SendChatMessage(sender_id,"enabled for "..playername.."")
-end
-
-local function leave(sender_id, sender_name, message, number)
-	local playerid = number or sender_id
-	local playername = MP.GetPlayerName(playerid)
-	includedPlayers[playerid] = nil
-	MP.SendChatMessage(sender_id,"enabled for "..playername.."")
 end
 
 local function start(sender_id, sender_name, message, value)
@@ -540,7 +733,7 @@ local function greenFadeDist(sender_id, sender_name, message, value)
 	if value then
 		defaultGreenFadeDistance = value
 		if gameState.settings then
-			gameState.settings.GreenFadeDistance = defaultGreenFadeDistance
+			gameState.settings.greenFadeDistance = defaultGreenFadeDistance
 		end
 		MP.SendChatMessage(sender_id,"set greenFadeDist to "..value.."")
 
@@ -611,10 +804,112 @@ local function setResetSpeed(sender_id, sender_name, message, value)
 	end
 end
 
+local function status(sender_id)
+	local running = gameState.gameRunning and true or false
+	local phase = "idle"
+	if running then
+		if gameState.gameEnding then phase = "ending"
+		elseif (gameState.time or 0) < 0 then phase = "countdown"
+		else phase = "round" end
+	end
+	MP.SendChatMessage(sender_id, "Status: running="..tostring(running).." phase="..phase)
+	MP.SendChatMessage(sender_id, "Players: tagged="..tostring(gameState.TaggedPlayers or 0).." untagged="..tostring(gameState.nonTaggedPlayers or 0).." total="..tostring(gameState.playerCount or 0))
+	MP.SendChatMessage(sender_id, "Config: roundLength="..tostring((roundLength or 0)/60).."min greenFadeDist="..tostring(defaultGreenFadeDistance).." filterIntensity="..tostring(defaultDistancecolor))
+	MP.SendChatMessage(sender_id, "Config: colorPulse="..tostring(defaultColorPulse).." taggerTint="..tostring(defaultTaggerTint).." resetRestrict="..tostring(disableResetsWhenMoving).." maxResetSpeed="..tostring(maxResetMovingSpeed))
+	MP.SendChatMessage(sender_id, "Mode: "..tostring(defaultMode).." teamCount="..tostring(defaultTeamCount).." initialTaggers="..tostring(defaultInitialTaggers).." winCondition="..tostring(defaultWinCondition))
+	if defaultMode == "multiteam" then
+		local counts = getSurvivorTeamCounts()
+		local enabled = getEnabledTeamColors()
+		local parts = {}
+		for _, c in ipairs(enabled) do
+			parts[#parts+1] = c .. ":" .. tostring(counts[c] or 0)
+		end
+		MP.SendChatMessage(sender_id, "Survivors by team: " .. table.concat(parts, " | "))
+	end
+end
+
+local function cmdTeams(sender_id, args)
+	local action = (args[2] or ""):lower()
+	if action == "random" then
+		manualTeamAssignments = {}
+		defaultTeamCount = #TEAM_COLORS
+		MP.SendChatMessage(sender_id, "Cleared manual team assignments. Next round will auto-balance across all team colors (teamCount="..tostring(defaultTeamCount)..").")
+		return
+	end
+	if action == "set" then
+		local user = resolvePlayerNameByQuery(args[3] or "")
+		local color = (args[4] or ""):lower()
+		local colorIndex = nil
+		for i, c in ipairs(TEAM_COLORS) do if c == color then colorIndex = i break end end
+		if not user then MP.SendChatMessage(sender_id, "teams set: username not found") return end
+		if not colorIndex then MP.SendChatMessage(sender_id, "teams set: invalid color") return end
+		if defaultTeamCount < colorIndex then
+			defaultTeamCount = colorIndex
+			MP.SendChatMessage(sender_id, "Expanded teamCount to "..tostring(defaultTeamCount).." to enable color "..color)
+		end
+		manualTeamAssignments[user] = color
+		MP.SendChatMessage(sender_id, "Assigned "..user.." to team "..color.." (next round)")
+		return
+	end
+	if action == "clear" then
+		local user = resolvePlayerNameByQuery(args[3] or "")
+		if not user then MP.SendChatMessage(sender_id, "teams clear: username not found") return end
+		manualTeamAssignments[user] = nil
+		MP.SendChatMessage(sender_id, "Cleared team assignment for "..user)
+		return
+	end
+	if action == "list" then
+		MP.SendChatMessage(sender_id, "Manual team assignments:")
+		local any = false
+		for name, color in pairs(manualTeamAssignments) do
+			any = true
+			MP.SendChatMessage(sender_id, "  "..name.." -> "..color)
+		end
+		if not any then MP.SendChatMessage(sender_id, "  (none)") end
+		return
+	end
+	MP.SendChatMessage(sender_id, "Usage: /tag teams random|set <username> <color>|clear <username>|list")
+end
+
+local function cmdTaggers(sender_id, args)
+	local action = (args[2] or ""):lower()
+	if action == "add" then
+		local user = resolvePlayerNameByQuery(args[3] or "")
+		if not user then MP.SendChatMessage(sender_id, "taggers add: username not found") return end
+		manualInitialTaggers[user] = true
+		MP.SendChatMessage(sender_id, "Added manual tagger: "..user.." (next round)")
+		return
+	end
+	if action == "remove" then
+		local user = resolvePlayerNameByQuery(args[3] or "")
+		if not user then MP.SendChatMessage(sender_id, "taggers remove: username not found") return end
+		manualInitialTaggers[user] = nil
+		MP.SendChatMessage(sender_id, "Removed manual tagger: "..user)
+		return
+	end
+	if action == "clear" then
+		manualInitialTaggers = {}
+		MP.SendChatMessage(sender_id, "Cleared manual taggers")
+		return
+	end
+	if action == "list" then
+		MP.SendChatMessage(sender_id, "Manual taggers:")
+		local any=false
+		for name,_ in pairs(manualInitialTaggers) do any=true; MP.SendChatMessage(sender_id, "  "..name) end
+		if not any then MP.SendChatMessage(sender_id, "  (none)") end
+		return
+	end
+	MP.SendChatMessage(sender_id, "Usage: /tag taggers add|remove <username> | clear | list")
+end
+
 commands = {
 	["help"] = {
 		["function"] = help,
-		["tooltip"] = "Displays List of available commands"
+		["tooltip"] = "Displays list of available commands"
+	},
+	["status"] = {
+		["function"] = status,
+		["tooltip"] = "Shows current round state and settings"
 	},
 	["start"] = {
 		["function"] = start,
@@ -665,15 +960,101 @@ commands = {
 --Chat Commands
 function tagChatMessageHandler(sender_id, sender_name, message)
 	local msgStart = string.match(message,"[^%s]+")
-	if msgStart == "/tag" or msgStart == "/tag" then
-		local commandstringraw = string.sub(message,string.len(msgStart)+2)
-		local commandstring, variable = string.match(commandstringraw,"^(.+) (%d*%.?%d*)$")
-		local commandStringFinal = commandstring or commandstringraw
+	if msgStart == "/tag" then
+		local raw = string.sub(message, string.len(msgStart) + 2)
+		raw = (raw or ""):gsub("^%s+", ""):gsub("%s+$", "")
+		if raw == "" then
+			help(sender_id)
+			return 1
+		end
+
+		local args = {}
+		for w in raw:gmatch("%S+") do table.insert(args, w) end
+		local first = (args[1] or ""):lower()
+
+		local commandStringFinal = nil
+		local variable = nil
+
+		-- New normalized syntax: /tag set <setting> <value>
+		if first == "set" then
+			local setting = (args[2] or ""):lower()
+			if setting == "mode" then
+				local m = (args[3] or ""):lower()
+				if m ~= "classic" and m ~= "multiteam" then
+					MP.SendChatMessage(sender_id, "Usage: /tag set mode classic|multiteam")
+					return 1
+				end
+				defaultMode = m
+				MP.SendChatMessage(sender_id, "Set mode to "..m)
+				return 1
+			elseif setting == "teamcount" then
+				local n = tonumber(args[3])
+				if not n then MP.SendChatMessage(sender_id, "Usage: /tag set teamCount <2-6>") return 1 end
+				defaultTeamCount = clamp(math.floor(n), 2, #TEAM_COLORS)
+				MP.SendChatMessage(sender_id, "Set teamCount to "..tostring(defaultTeamCount))
+				return 1
+			elseif setting == "taggers" then
+				local n = tonumber(args[3])
+				if not n then MP.SendChatMessage(sender_id, "Usage: /tag set taggers <count>") return 1 end
+				defaultInitialTaggers = clamp(math.floor(n), 1, 64)
+				MP.SendChatMessage(sender_id, "Set initial taggers to "..tostring(defaultInitialTaggers))
+				return 1
+			elseif setting == "wincondition" then
+				local wc = (args[3] or ""):lower()
+				if wc ~= "classic" and wc ~= "lastteam" then
+					MP.SendChatMessage(sender_id, "Usage: /tag set winCondition classic|lastteam")
+					return 1
+				end
+				defaultWinCondition = wc
+				MP.SendChatMessage(sender_id, "Set winCondition to "..wc)
+				return 1
+			end
+
+			variable = tonumber(args[3])
+			local setMap = {
+				["gamelength"] = "game length set",
+				["greenfadedist"] = "greenFadeDist set",
+				["filterintensity"] = "filterIntensity set",
+				["maxresetspeed"] = "MaxResetSpeed set",
+			}
+			commandStringFinal = setMap[setting]
+			if not commandStringFinal then
+				MP.SendChatMessage(sender_id, "Unknown /tag set key. Try: mode, teamCount, taggers, winCondition, gameLength, greenFadeDist, filterIntensity, maxResetSpeed")
+				return 1
+			end
+			if not variable then
+				MP.SendChatMessage(sender_id, "Missing numeric value for /tag set " .. tostring(setting))
+				return 1
+			end
+		elseif first == "teams" then
+			cmdTeams(sender_id, args)
+			return 1
+		elseif first == "taggers" then
+			cmdTaggers(sender_id, args)
+			return 1
+		elseif first == "toggle" then
+			local setting = (args[2] or ""):lower()
+			local toggleMap = {
+				["colorpulse"] = "ColorPulse toggle",
+				["taggertint"] = "tagger tint toggle",
+				["resetatspeedallowed"] = "ResetAtSpeedAllowed toggle",
+			}
+			commandStringFinal = toggleMap[setting]
+			if not commandStringFinal then
+				MP.SendChatMessage(sender_id, "Unknown /tag toggle key. Try: colorPulse, taggerTint, resetAtSpeedAllowed")
+				return 1
+			end
+		else
+			-- Backward compatibility (old command phrases still work)
+			local commandstring, num = string.match(raw, "^(.+) (%-?%d*%.?%d+)$")
+			commandStringFinal = commandstring or raw
+			variable = tonumber(num)
+		end
 
 		if commands[commandStringFinal] then
-			commands[commandStringFinal]["function"](sender_id, sender_name, message ,tonumber(variable))
+			commands[commandStringFinal]["function"](sender_id, sender_name, message, variable)
 		else
-			MP.SendChatMessage(sender_id,"command not found, type /tag help for a list of tag commands")
+			MP.SendChatMessage(sender_id, "command not found, type /tag help for a list of tag commands")
 		end
 		return 1
 	elseif string.sub(message,1,5) == "/help" then
@@ -682,19 +1063,30 @@ function tagChatMessageHandler(sender_id, sender_name, message)
 	end
 end
 
-function onPlayerDisconnect(playerID)
-	local PlayerName = MP.GetPlayerName(playerID)
-	if gameState.gameRunning and gameState.players and gameState.players[PlayerName] then
-		gameState.players[PlayerName] = "remove"
+local function markPlayerRemovedById(playerID)
+	if not (gameState.gameRunning and gameState.players) then return end
+	for name, pdata in pairs(gameState.players) do
+		if type(pdata) == "table" and tonumber(pdata.ID) == tonumber(playerID) then
+			gameState.players[name] = "remove"
+			return
+		end
+	end
+
+	local playerName = MP.GetPlayerName(playerID)
+	if playerName and gameState.players[playerName] then
+		gameState.players[playerName] = "remove"
 	end
 end
 
+function onPlayerDisconnect(playerID)
+	markPlayerRemovedById(playerID)
+end
+
 function onVehicleDeleted(playerID,vehicleID)
-	local PlayerName = MP.GetPlayerName(playerID)
-	if gameState.gameRunning and gameState.players and gameState.players[PlayerName] then
-		if not MP.GetPlayerVehicles(playerID) then
-			gameState.players[PlayerName] = "remove"
-		end
+	if not gameState.gameRunning then return end
+	local vehicles = MP.GetPlayerVehicles(playerID)
+	if not vehicles or next(vehicles) == nil then
+		markPlayerRemovedById(playerID)
 	end
 end
 

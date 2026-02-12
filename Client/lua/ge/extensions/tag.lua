@@ -9,6 +9,7 @@ local defaultgreenFadeDistance = 20
 
 --extensions.unload("tag") extensions.load("tag") extensions.reload("tag")
 local blockedActions = {"dropPlayerAtCamera", "dropPlayerAtCameraNoReset", "recover_vehicle", "recover_vehicle_alt", "recover_to_last_road", "reload_vehicle", "reload_all_vehicles", "loadHome", "saveHome", "reset_all_physics" ,"reset_physics"}
+local vignetteShaderAPI = rawget(_G, "vignetteShaderAPI") or (extensions and extensions.load and extensions.load("vignetteShaderAPI"))
 
 local function getStat(name)
 	return gameplay_statistic.metricGet(name) and gameplay_statistic.metricGet(name).value or 0
@@ -440,6 +441,22 @@ local hunterBackColor = color(80, 0, 0, 200)
 local survivorTextColor = color(0, 120, 255, 255)
 local survivorBackColor = color(0, 0, 80, 200)
 
+local TEAM_LABEL_COLORS = {
+	red    = { text = color(255, 90, 90, 255),  back = color(70, 10, 10, 210) },
+	blue   = { text = color(90, 170, 255, 255), back = color(10, 30, 70, 210) },
+	purple = { text = color(210, 140, 255, 255), back = color(45, 20, 70, 210) },
+	white  = { text = color(245, 245, 255, 255), back = color(55, 55, 70, 220) },
+	green  = { text = color(120, 255, 150, 255), back = color(10, 55, 20, 210) },
+	yellow = { text = color(255, 235, 120, 255), back = color(70, 60, 10, 220) },
+}
+
+local function teamLabelColorsOf(player)
+	local t = player and player.team and tostring(player.team):lower() or "blue"
+	local c = TEAM_LABEL_COLORS[t]
+	if c then return c.text, c.back end
+	return survivorTextColor, survivorBackColor
+end
+
 local vehTagPos = vec3()
 
 local function drawTeamTag(vehicle, text, txtColor, backColor)
@@ -465,10 +482,52 @@ local defaultColorTimer = 1.6
 
 local tempLinearColor = Point4F(0, 0, 0, 0)
 
+local TEAM_PAINT = {
+	red = Point4F(1.0, 0.15, 0.15, 1.0),
+	blue = Point4F(0.1, 0.4, 1.0, 1.0),
+	purple = Point4F(0.65, 0.3, 1.0, 1.0),
+	white = Point4F(0.9, 0.9, 0.95, 1.0),
+	green = Point4F(0.15, 0.9, 0.35, 1.0),
+	yellow = Point4F(1.0, 0.9, 0.2, 1.0),
+}
+
+local function teamNameOf(player)
+	local t = player and player.team and tostring(player.team):lower() or "blue"
+	if TEAM_PAINT[t] then return t end
+	return "blue"
+end
+
+local function teamPaintOf(player)
+	return TEAM_PAINT[teamNameOf(player)] or TEAM_PAINT.blue
+end
+
+local function setVehPaint(veh, p4)
+	if not veh or not p4 then return end
+	local c = Point4F(p4.x, p4.y, p4.z, veh.color.w)
+	veh.color = c
+	veh.colorPalette0 = c
+	veh.colorPalette1 = c
+end
+
+
 local function color(player,vehicle,dt)
 	local veh = getObjectByID(vehicle.gameVehicleID)
 	if not veh then return end
+
+	-- Capture original paint lazily for ALL vehicles.
+	-- This avoids first-round reset failures when the extension loads after vehicles already exist.
+	if not vehicle.originalColor then vehicle.originalColor = veh.color end
+	if not vehicle.originalcolorPalette0 then vehicle.originalcolorPalette0 = veh.colorPalette0 end
+	if not vehicle.originalcolorPalette1 then vehicle.originalcolorPalette1 = veh.colorPalette1 end
+
 	if player.tagged then
+		if gamestate.settings and gamestate.settings.mode == "multiteam" and gamestate.oneTagged then
+			local base = teamPaintOf(player)
+			-- Slightly brighter for taggers in multiteam mode
+			local boosted = Point4F(math.min(1, base.x * 1.1), math.min(1, base.y * 1.1), math.min(1, base.z * 1.1), 1.0)
+			setVehPaint(veh, boosted)
+			return
+		end
 		if not vehicle.transition or not vehicle.colortimer then
 			vehicle.transition = defaultTransition
 			vehicle.colortimer = defaultColorTimer
@@ -546,10 +605,14 @@ local function color(player,vehicle,dt)
 		end
 	else
 		if not vehicle.hiderOriginalColor then vehicle.hiderOriginalColor = veh.color end
-		local blueColor = Point4F(0.1, 0.4, 1.0, veh.color.w)
-		veh.color = blueColor
-		veh.colorPalette0 = blueColor
-		veh.colorPalette1 = blueColor
+		if gamestate.settings and gamestate.settings.mode == "multiteam" and gamestate.oneTagged then
+			setVehPaint(veh, teamPaintOf(player))
+		else
+			-- Before first tagger is chosen, keep original look.
+			veh.color = vehicle.originalColor or veh.color
+			veh.colorPalette0 = vehicle.originalcolorPalette0 or veh.colorPalette0
+			veh.colorPalette1 = vehicle.originalcolorPalette1 or veh.colorPalette1
+		end
 	end
 end
 
@@ -587,8 +650,8 @@ end
 local focusedVehPos = vec3()
 local otherVehPos = vec3()
 
-local defaultTintColor = Point4F(0.0, 0.25, 0.5,1)
-local taggedTintColor = Point4F(0.5, 0.0, 0.0,1)
+local defaultTintColor = Point4F(0.0, 0.25, 1.0, 0.55)
+local taggedTintColor = Point4F(1.0, 0.0, 0.0, 0.6)
 
 local function onPreRender(dt)
 	if MPCoreNetwork and not MPCoreNetwork.isMPSession() then return end
@@ -619,12 +682,14 @@ local function onPreRender(dt)
 				if currentVehID and currentVehID ~= vehicle.gameVehicleID then
 					if focusedPlayer.tagged and not player.tagged then
 						if curentOwnerName ~= vehicle.ownerName then
-							drawTeamTag(vehicle, "HIDER", survivorTextColor, survivorBackColor)
+							local txtCol, backCol = teamLabelColorsOf(player)
+							drawTeamTag(vehicle, "TEAM " .. string.upper(teamNameOf(player)), txtCol, backCol)
 						end
 					elseif player.tagged then
 						local veh = getObjectByID(vehicle.gameVehicleID)
 						if veh and currentVeh then
-							drawTeamTag(vehicle, "HUNTER", hunterTextColor, hunterBackColor)
+							local txtCol, backCol = teamLabelColorsOf(player)
+							drawTeamTag(vehicle, "TAGGER", txtCol, backCol)
 							focusedVehPos:set(be:getObjectOOBBCenterXYZ(currentVehID))
 							otherVehPos:set(be:getObjectOOBBCenterXYZ(vehicle.gameVehicleID))
 							local distance = focusedVehPos:squaredDistance(otherVehPos)
@@ -647,11 +712,19 @@ local function onPreRender(dt)
 	distancecolor = math.min(1,1 -(closestTagged/(tempSetting or defaultgreenFadeDistance)))
 
 	if vignetteShaderAPI then
+		if gamestate.settings and gamestate.settings.mode == "multiteam" and gamestate.oneTagged then
+			local tp = teamPaintOf(focusedPlayer)
+			defaultTintColor = Point4F(tp.x, tp.y, tp.z, 0.35)
+			taggedTintColor = Point4F(tp.x, tp.y, tp.z, 0.5)
+		else
+			defaultTintColor = Point4F(0.0, 0.25, 1.0, 0.55)
+			taggedTintColor = Point4F(1.0, 0.0, 0.0, 0.6)
+		end
 		vignetteShaderAPI.setColor(defaultTintColor)
 	end
 
-	if gamestate.settings and gamestate.settings.taggerTint and focusedPlayer.tagged then
-		distancecolor = gamestate.settings.distancecolor or 0
+	if focusedPlayer.tagged then
+		distancecolor = gamestate.settings and gamestate.settings.distancecolor or 0
 		if vignetteShaderAPI then
 			distancecolor = distancecolor + 0.2
 			vignetteShaderAPI.setColor(taggedTintColor)
@@ -712,6 +785,6 @@ M.onVehicleColorChanged = onVehicleColorChanged
 M.gamestate = gamestate
 
 
-M.onInit = function() setExtensionUnloadMode(M, "manual") end
+M.onInit = function() setExtensionUnloadMode("tag", "manual") end
 
 return M
