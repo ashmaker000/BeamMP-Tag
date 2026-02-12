@@ -12,11 +12,11 @@ BeamMP-Tag is a tag/infection-style multiplayer mode with server-authoritative r
 - Team-aware visuals (car tint, vignette, and nametag colors)
 - Countdown-safe visuals: team tinting starts after initial tagger selection
 
-## Install
-1. Put `Client/` and `Server/` into your BeamMP mod setup.
-2. Ensure the server runs `Server/Tag/main.lua`.
-3. Ensure the client package includes `scripts/tag/modScript.lua` at ZIP root.
-   - This loads `tag` + `vignetteShaderAPI` early so rounds do not miss startup events.
+## Setup
+1. Unpack `BeamMP-Tag.zip` and your see `Client` and `Server` folders
+2. Go into `Client folder` place the `BeamMP-Tag.zip` in your Clients folder, then head to `Server folder` and create a folder called `Tag` and add `main.lua` into your new folder.
+3. Start a round by using `/tag start` in the chat box.
+4. After a few seconds the round will start and the person being Tag will turn to Red and will need to tag every one in Blue.
 
 ## Commands
 Use `/tag ...`.
