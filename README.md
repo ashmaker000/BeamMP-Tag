@@ -19,11 +19,41 @@ BeamMP-Tag is a tag/infection-style multiplayer mode with server-authoritative r
 - Team-aware visuals (car tint, vignette, and nametag colors)
 - Countdown-safe visuals: team tinting starts after initial tagger selection
 
-## Setup
-1. Unpack `BeamMP-Tag.zip` and your see `Client` and `Server` folders
-2. Go into your `Client folder` on the server and place the `BeamMP-Tag.zip`, then head to the `Server folder` and create a folder called `Tag` and add `main.lua` into your new folder.
-3. Start a round by using `/tag start` in the chat box.
-4. After a few seconds the round will start and the person being Tag will turn to Red and will need to tag every one in Blue.
+### Installation
+
+1. **Download the release**
+
+   * Go to the **Releases** page.
+   * Download the latest `.zip` file.
+
+2. **Extract the files**
+
+   * Unzip the download.
+   * You will get two folders:
+
+     * `Client`
+     * `Server`
+
+3. **Install the client files**
+
+   * Open the extracted **Client** folder.
+   * Inside it is a `.zip` file.
+   * Upload that `.zip` into your server’s **client mods folder**.
+
+4. **Install the server files**
+
+   * Open the extracted **Server** folder.
+   * Inside is a folder for the game mode (e.g. `CarHunt`, `Tag`, `PropHunt` etc.).
+   * On your server, open the main **server folder**.
+   * Create a folder for that game mode (for example: `CarHunt`, `Tag`, `PropHunt`).
+   * Copy **all files** from the extracted game mode folder into the matching folder you just created on the server.
+
+5. **Restart the server**
+
+   * Restart your BeamMP server.
+   * The game mode should now be active.
+
+---
 
 ## Commands
 Use `/tag ...`.
