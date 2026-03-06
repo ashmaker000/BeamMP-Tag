@@ -659,12 +659,11 @@ function timer()
 	end
 end
 
-MP.RegisterEvent("onContact", "onContact")
+MP.RegisterEvent("tag_onContact", "onContact")
 
-MP.RegisterEvent("second", "timer")
-MP.CancelEventTimer("counter")
-MP.CancelEventTimer("second")
-MP.CreateEventTimer("second",1000)
+MP.RegisterEvent("tag_second", "timer")
+MP.CancelEventTimer("tag_second")
+MP.CreateEventTimer("tag_second",1000)
 
 
 

@@ -11,6 +11,25 @@ local defaultgreenFadeDistance = 20
 local blockedActions = {"dropPlayerAtCamera", "dropPlayerAtCameraNoReset", "recover_vehicle", "recover_vehicle_alt", "recover_to_last_road", "reload_vehicle", "reload_all_vehicles", "loadHome", "saveHome", "reset_all_physics" ,"reset_physics"}
 local vignetteShaderAPI = rawget(_G, "vignetteShaderAPI") or (extensions and extensions.load and extensions.load("vignetteShaderAPI"))
 
+local VIGNETTE_OWNER_KEY = "__beammp_vignette_owner"
+local VIGNETTE_OWNER_ID = "tag"
+local function getVignetteOwner()
+	return rawget(_G, VIGNETTE_OWNER_KEY)
+end
+local function claimVignetteOwner()
+	local owner = getVignetteOwner()
+	if owner == nil or owner == VIGNETTE_OWNER_ID then
+		rawset(_G, VIGNETTE_OWNER_KEY, VIGNETTE_OWNER_ID)
+		return true
+	end
+	return false
+end
+local function releaseVignetteOwner()
+	if getVignetteOwner() == VIGNETTE_OWNER_ID then
+		rawset(_G, VIGNETTE_OWNER_KEY, nil)
+	end
+end
+
 local function getStat(name)
 	return gameplay_statistic.metricGet(name) and gameplay_statistic.metricGet(name).value or 0
 end
@@ -148,7 +167,10 @@ local function resetTagged()
 	MPVehicleGE.hideNicknames(false)
 
 	if vignetteShaderAPI then
-		vignetteShaderAPI.resetVignette()
+		if getVignetteOwner() == VIGNETTE_OWNER_ID then
+			vignetteShaderAPI.resetVignette()
+		end
+		releaseVignetteOwner()
 	end
 	scenetree["PostEffectCombinePassObject"]:setField("enableBlueShift", 0,0)
 	scenetree["PostEffectCombinePassObject"]:setField("blueShiftColor", 0,"0 0 0")
@@ -388,7 +410,7 @@ local function sendContact(vehID,localVehID)
 				gamestate.players[vehPlayerName].contacted = true
 				local serverVehID = MPVehicleGE.getServerVehicleID(vehID)
 				local remotePlayerID, vehicleID = string.match(serverVehID, "(%d+)-(%d+)")
-				if TriggerServerEvent then TriggerServerEvent("onContact", remotePlayerID) end
+				if TriggerServerEvent then TriggerServerEvent("tag_onContactRecieve", remotePlayerID) end
 			end
 		end
 	end
@@ -667,6 +689,8 @@ local function onPreRender(dt)
 	local focusedPlayer = gamestate.players[curentOwnerName]
 	if not focusedPlayer then return end
 
+	local hasVignetteOwner = claimVignetteOwner()
+
 	if gamestate.settings and gamestate.settings.disableResetsWhenMoving == true then
 		if MPVehicleGE.isOwn(currentVehID) then
 			checkForMovement(currentVehID,currentVeh,dt)
@@ -711,7 +735,7 @@ local function onPreRender(dt)
 	end
 	distancecolor = math.min(1,1 -(closestTagged/(tempSetting or defaultgreenFadeDistance)))
 
-	if vignetteShaderAPI then
+	if vignetteShaderAPI and hasVignetteOwner then
 		if gamestate.settings and gamestate.settings.mode == "multiteam" and gamestate.oneTagged then
 			local tp = teamPaintOf(focusedPlayer)
 			defaultTintColor = Point4F(tp.x, tp.y, tp.z, 0.35)
@@ -725,7 +749,7 @@ local function onPreRender(dt)
 
 	if focusedPlayer.tagged then
 		distancecolor = gamestate.settings and gamestate.settings.distancecolor or 0
-		if vignetteShaderAPI then
+		if vignetteShaderAPI and hasVignetteOwner then
 			distancecolor = distancecolor + 0.2
 			vignetteShaderAPI.setColor(taggedTintColor)
 		end
@@ -737,13 +761,13 @@ local function onPreRender(dt)
 		fade = math.max(0,fade - dt)
 	end
 
-	if vignetteShaderAPI then
+	if vignetteShaderAPI and hasVignetteOwner then
 		if not vignetteShaderAPI.isEnabled() then
 			vignetteShaderAPI.setEnabled(true)
 		end
 		vignetteShaderAPI.setInnerRadius((0.8 - math.max(0,distancecolor*fade)))
 		vignetteShaderAPI.setOuterRadius((1.8 - math.max(0,distancecolor*fade))) --math.max(0,1 -(distancecolor*2))
-	else
+	elseif not vignetteShaderAPI then
 		scenetree["PostEffectCombinePassObject"]:setField("enableBlueShift", 0,distancecolor*0.7*fade)
 		scenetree["PostEffectCombinePassObject"]:setField("blueShiftColor", 0,"0 1 0")
 	end
