@@ -21,9 +21,9 @@ local maxResetMovingSpeed = 2
 
 local TEAM_COLORS = {"red", "blue", "purple", "white", "green", "yellow"}
 local defaultMode = "multiteam" -- classic|multiteam
-local defaultTeamCount = 6
+local defaultTeamCount = 2
 local defaultInitialTaggers = 1
-local defaultWinCondition = "classic" -- classic|lastteam
+local defaultWinCondition = "mostteam" -- classic|lastteam|mostteam
 
 local manualTeamAssignments = {} -- playerName -> color
 local manualInitialTaggers = {} -- playerName -> true
@@ -394,6 +394,10 @@ local function gameEnd(reason)
 	elseif reason == "lastteam" then
 		local wt = tostring(gameState.winningTeam or "unknown")
 		MP.SendChatMessage(-1,"Game over, team "..wt.." wins!")
+	elseif reason == "mostteam" then
+		local wt = tostring(gameState.winningTeam or "unknown")
+		local wc = tonumber(gameState.winningTeamCount or 0) or 0
+		MP.SendChatMessage(-1,"Game over, "..wt.." wins with "..tostring(wc).." survivors!")
 	elseif reason == "manual" then
 		--MP.SendChatMessage(-1,"Game stopped,"..nonTaggedCount.." survived and "..taggedCount.." got tagged")
 		MP.SendChatMessage(-1,"Game stopped, Everyone Looses")
@@ -617,7 +621,30 @@ local function gameRunningLoop()
 	end
 
 	if not gameState.gameEnding and gameState.time == gameState.roundLength then
-		gameEnd("time")
+		if defaultMode == "multiteam" and defaultWinCondition == "mostteam" then
+			local counts = getSurvivorTeamCounts()
+			local bestTeam, bestCount = nil, -1
+			local tie = false
+			for _, c in ipairs(getEnabledTeamColors()) do
+				local n = tonumber(counts[c] or 0) or 0
+				if n > bestCount then
+					bestCount = n
+					bestTeam = c
+					tie = false
+				elseif n == bestCount then
+					tie = true
+				end
+			end
+			if bestTeam and bestCount > 0 and not tie then
+				gameState.winningTeam = bestTeam
+				gameState.winningTeamCount = bestCount
+				gameEnd("mostteam")
+			else
+				gameEnd("time")
+			end
+		else
+			gameEnd("time")
+		end
 		gameState.endtime = gameState.time + 10
 	elseif not gameState.gameEnding and gameState.everyoneTagged == true then
 		gameEnd("tagged")
@@ -678,7 +705,7 @@ local function help(sender_id, sender_name, message, variable)
 	MP.SendChatMessage(sender_id,"  /tag set mode classic|multiteam")
 	MP.SendChatMessage(sender_id,"  /tag set teamCount <2..6>")
 	MP.SendChatMessage(sender_id,"  /tag set taggers <count>")
-	MP.SendChatMessage(sender_id,"  /tag set winCondition classic|lastteam")
+	MP.SendChatMessage(sender_id,"  /tag set winCondition classic|lastteam|mostteam")
 	MP.SendChatMessage(sender_id,"  /tag set gameLength <minutes>")
 	MP.SendChatMessage(sender_id,"  /tag set greenFadeDist <meters>")
 	MP.SendChatMessage(sender_id,"  /tag set filterIntensity <0..1>")
@@ -1000,8 +1027,8 @@ function tagChatMessageHandler(sender_id, sender_name, message)
 				return 1
 			elseif setting == "wincondition" then
 				local wc = (args[3] or ""):lower()
-				if wc ~= "classic" and wc ~= "lastteam" then
-					MP.SendChatMessage(sender_id, "Usage: /tag set winCondition classic|lastteam")
+				if wc ~= "classic" and wc ~= "lastteam" and wc ~= "mostteam" then
+					MP.SendChatMessage(sender_id, "Usage: /tag set winCondition classic|lastteam|mostteam")
 					return 1
 				end
 				defaultWinCondition = wc

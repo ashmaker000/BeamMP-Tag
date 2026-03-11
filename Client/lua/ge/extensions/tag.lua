@@ -9,16 +9,49 @@ local defaultgreenFadeDistance = 20
 
 --extensions.unload("tag") extensions.load("tag") extensions.reload("tag")
 local blockedActions = {"dropPlayerAtCamera", "dropPlayerAtCameraNoReset", "recover_vehicle", "recover_vehicle_alt", "recover_to_last_road", "reload_vehicle", "reload_all_vehicles", "loadHome", "saveHome", "reset_all_physics" ,"reset_physics"}
-local vignetteShaderAPI = rawget(_G, "vignetteShaderAPI") or (extensions and extensions.load and extensions.load("vignetteShaderAPI"))
+pcall(require, "client/postFx/tagVignette")
+local function buildTagVignetteAPI()
+	local fx = scenetree and scenetree.findObject and scenetree.findObject("TagVignettePostFX") or nil
+	if not fx then return nil end
+	return {
+		setEnabled = function(state) fx.isEnabled = state and true or false end,
+		isEnabled = function() return fx.isEnabled and true or false end,
+		resetVignette = function()
+			fx.innerRadius = 0
+			fx.outerRadius = 0
+			fx.center = Point2F(0.5, 0.5)
+			fx.color = Point4F(0,0,0,0)
+			fx.isEnabled = false
+		end,
+		setInnerRadius = function(v) fx.innerRadius = tonumber(v) or 1 end,
+		setOuterRadius = function(v) fx.outerRadius = tonumber(v) or 1 end,
+		setColor = function(c) fx.color = c or Point4F(0.0,0.25,1.0,0.55) end
+	}
+end
+local tagVignetteAPI = nil
+
+local function getVignetteAPI()
+	-- Prefer shared API when available (same path PropHunt uses and proven stable).
+	if extensions and type(extensions.tagVignetteAPI) == "table" then
+		return extensions.tagVignetteAPI
+	end
+	if type(rawget(_G, "tagVignetteAPI")) == "table" then
+		return rawget(_G, "tagVignetteAPI")
+	end
+	if not tagVignetteAPI then
+		tagVignetteAPI = buildTagVignetteAPI()
+	end
+	return tagVignetteAPI
+end
 
 local VIGNETTE_OWNER_KEY = "__beammp_vignette_owner"
 local VIGNETTE_OWNER_ID = "tag"
 local function getVignetteOwner()
 	return rawget(_G, VIGNETTE_OWNER_KEY)
 end
-local function claimVignetteOwner()
+local function claimVignetteOwner(force)
 	local owner = getVignetteOwner()
-	if owner == nil or owner == VIGNETTE_OWNER_ID then
+	if force == true or owner == nil or owner == VIGNETTE_OWNER_ID then
 		rawset(_G, VIGNETTE_OWNER_KEY, VIGNETTE_OWNER_ID)
 		return true
 	end
@@ -166,9 +199,10 @@ local function resetTagged()
 
 	MPVehicleGE.hideNicknames(false)
 
-	if vignetteShaderAPI then
-		if getVignetteOwner() == VIGNETTE_OWNER_ID then
-			vignetteShaderAPI.resetVignette()
+	local vig = getVignetteAPI()
+	if vig then
+		if getVignetteOwner() == VIGNETTE_OWNER_ID and vig.resetVignette then
+			vig.resetVignette()
 		end
 		releaseVignetteOwner()
 	end
@@ -254,8 +288,9 @@ local function updateGameState(data)
 
 	if time and time < 0 then
 		txt = "Game starts in "..math.abs(time).." seconds"
-		if vignetteShaderAPI and not vignetteShaderAPI.isEnabled() then
-			vignetteShaderAPI.setEnabled(true)
+		local vig = getVignetteAPI()
+		if vig and vig.isEnabled and vig.setEnabled and not vig.isEnabled() then
+			vig.setEnabled(true)
 		end
 	elseif gamestate.gameRunning and not gamestate.gameEnding and time or gamestate.endtime and (gamestate.endtime - time) > 9 then
 
@@ -689,7 +724,8 @@ local function onPreRender(dt)
 	local focusedPlayer = gamestate.players[curentOwnerName]
 	if not focusedPlayer then return end
 
-	local hasVignetteOwner = claimVignetteOwner()
+	-- Tag should own vignette while a Tag round is running.
+	local hasVignetteOwner = claimVignetteOwner(true)
 
 	if gamestate.settings and gamestate.settings.disableResetsWhenMoving == true then
 		if MPVehicleGE.isOwn(currentVehID) then
@@ -707,9 +743,9 @@ local function onPreRender(dt)
 					if focusedPlayer.tagged and not player.tagged then
 						if curentOwnerName ~= vehicle.ownerName then
 							local txtCol, backCol = teamLabelColorsOf(player)
-							drawTeamTag(vehicle, "TEAM " .. string.upper(teamNameOf(player)), txtCol, backCol)
+							drawTeamTag(vehicle, string.upper(teamNameOf(player)), txtCol, backCol)
 						end
-					elseif player.tagged then
+					elseif focusedPlayer.tagged and player.tagged then
 						local veh = getObjectByID(vehicle.gameVehicleID)
 						if veh and currentVeh then
 							local txtCol, backCol = teamLabelColorsOf(player)
@@ -735,41 +771,64 @@ local function onPreRender(dt)
 	end
 	distancecolor = math.min(1,1 -(closestTagged/(tempSetting or defaultgreenFadeDistance)))
 
-	if vignetteShaderAPI and hasVignetteOwner then
-		if gamestate.settings and gamestate.settings.mode == "multiteam" and gamestate.oneTagged then
+	-- Outbreak-style team tint mode for Tag: keep constant per-team color during active rounds.
+	-- This intentionally de-emphasizes proximity modulation so players always see team color.
+	if gamestate.settings and gamestate.settings.mode == "multiteam" then
+		distancecolor = 0.55
+	else
+		distancecolor = math.max(distancecolor or 0, 0.22)
+	end
+
+	local vig = getVignetteAPI()
+
+	if vig and hasVignetteOwner then
+		if gamestate.settings and gamestate.settings.mode == "multiteam" then
 			local tp = teamPaintOf(focusedPlayer)
-			defaultTintColor = Point4F(tp.x, tp.y, tp.z, 0.35)
-			taggedTintColor = Point4F(tp.x, tp.y, tp.z, 0.5)
+			defaultTintColor = Point4F(tp.x, tp.y, tp.z, 0.55)
+			taggedTintColor = Point4F(tp.x, tp.y, tp.z, 0.55)
 		else
 			defaultTintColor = Point4F(0.0, 0.25, 1.0, 0.55)
 			taggedTintColor = Point4F(1.0, 0.0, 0.0, 0.6)
 		end
-		vignetteShaderAPI.setColor(defaultTintColor)
+		if vig.setColor then vig.setColor(defaultTintColor) end
 	end
 
-	if focusedPlayer.tagged then
+	if focusedPlayer.tagged and (not (gamestate.settings and gamestate.settings.mode == "multiteam")) then
 		distancecolor = gamestate.settings and gamestate.settings.distancecolor or 0
-		if vignetteShaderAPI and hasVignetteOwner then
+		if vig and hasVignetteOwner then
 			distancecolor = distancecolor + 0.2
-			vignetteShaderAPI.setColor(taggedTintColor)
+			if vig.setColor then vig.setColor(taggedTintColor) end
 		end
 	end
 
-	if (gamestate.time -gamestate.endtime) > 6 then
-		fade = math.min(1,fade + dt)
-	elseif not gamestate.gameEnding or (gamestate.endtime - gamestate.time) > 1 then
-		fade = math.max(0,fade - dt)
+	-- Keep vignette visible during active gameplay and fade it out when ending/idle.
+	if gamestate.gameRunning and not gamestate.gameEnding then
+		fade = math.min(1, fade + dt * 2)
+	else
+		fade = math.max(0, fade - dt * 2)
 	end
 
-	if vignetteShaderAPI and hasVignetteOwner then
-		if not vignetteShaderAPI.isEnabled() then
-			vignetteShaderAPI.setEnabled(true)
+	if vig and hasVignetteOwner then
+		if vig.isEnabled and vig.setEnabled and not vig.isEnabled() then
+			vig.setEnabled(true)
 		end
-		vignetteShaderAPI.setInnerRadius((0.8 - math.max(0,distancecolor*fade)))
-		vignetteShaderAPI.setOuterRadius((1.8 - math.max(0,distancecolor*fade))) --math.max(0,1 -(distancecolor*2))
-	elseif not vignetteShaderAPI then
-		scenetree["PostEffectCombinePassObject"]:setField("enableBlueShift", 0,distancecolor*0.7*fade)
-		scenetree["PostEffectCombinePassObject"]:setField("blueShiftColor", 0,"0 1 0")
+		if vig.setInnerRadius then vig.setInnerRadius((0.8 - math.max(0,distancecolor*fade))) end
+		if vig.setOuterRadius then vig.setOuterRadius((1.8 - math.max(0,distancecolor*fade))) end --math.max(0,1 -(distancecolor*2))
+	end
+
+	-- Hard fallback (same family as CnR): always drive blueShift during active rounds so
+	-- team tint is visible even if vignette shader/API path fails on a client.
+	local fx = scenetree and scenetree["PostEffectCombinePassObject"] or nil
+	if fx then
+		local tint = defaultTintColor or Point4F(0.0, 0.25, 1.0, 0.55)
+		if gamestate.gameRunning and not gamestate.gameEnding then
+			local bs = math.max(0, math.min(1, (distancecolor or 0) * 0.85 * fade))
+			fx:setField("enableBlueShift", 0, bs)
+			fx:setField("blueShiftColor", 0, string.format("%g %g %g", tint.x or 0, tint.y or 0.25, tint.z or 1.0))
+		else
+			fx:setField("enableBlueShift", 0, 0)
+			fx:setField("blueShiftColor", 0, "0 0 0")
+		end
 	end
 end
 
